@@ -69,8 +69,22 @@
 <div class="flex min-h-screen items-center justify-center bg-background px-4">
 	<div class="w-full max-w-sm">
 		<div class="mb-8 text-center">
-			<h1 class="text-3xl font-bold tracking-tight">ItsOCR</h1>
-			<p class="mt-2 text-sm text-muted-foreground">
+			<a href="/" class="inline-flex items-center justify-center gap-2">
+				<div
+					class="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10 text-primary"
+				>
+					<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+						/>
+					</svg>
+				</div>
+				<span class="text-2xl font-bold tracking-tight">ItsOCR</span>
+			</a>
+			<p class="mt-3 text-sm text-muted-foreground">
 				{isLogin ? 'Welcome back' : 'Create your account'}
 			</p>
 		</div>

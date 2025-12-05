@@ -40,22 +40,25 @@ function createAuth() {
 	}
 
 	try {
-		// In dev mode, use localhost. In production, use BETTER_AUTH_BASE_URL
-		const baseURL = dev ? 'http://localhost:5173' : env.BETTER_AUTH_BASE_URL || '';
+		// Build trusted origins list - include all possible origins
+		// Localhost origins are harmless in production (won't be used)
+		const trustedOrigins: string[] = [
+			// Localhost for development (vite dev, wrangler dev, etc.)
+			'http://localhost:5173',
+			'http://localhost:5174',
+			'http://localhost:5175',
+			'http://localhost:8787', // wrangler dev
+			// Production origins
+			'https://itsocr.jweaker.workers.dev',
+			'https://itsocr.jweaker-t.workers.dev',
+			'https://itsocr.com',
+			'https://www.itsocr.com'
+		];
 
-		// Build trusted origins list
-		const trustedOrigins: string[] = [];
-		if (baseURL) trustedOrigins.push(baseURL);
-		if (dev) {
-			trustedOrigins.push('http://localhost:5173');
-			trustedOrigins.push('http://localhost:5174');
-			trustedOrigins.push('http://localhost:5175');
+		// Add BETTER_AUTH_BASE_URL if set and not already in the list
+		if (env.BETTER_AUTH_BASE_URL && !trustedOrigins.includes(env.BETTER_AUTH_BASE_URL)) {
+			trustedOrigins.push(env.BETTER_AUTH_BASE_URL);
 		}
-		// Add production origins
-		trustedOrigins.push('https://itsocr.jweaker.workers.dev');
-		trustedOrigins.push('https://itsocr.jweaker-t.workers.dev');
-		trustedOrigins.push('https://itsocr.com');
-		trustedOrigins.push('https://www.itsocr.com');
 
 		const authOptions: BetterAuthOptions = {
 			database: drizzleAdapter(db, {
@@ -68,7 +71,8 @@ function createAuth() {
 				}
 			}),
 			secret,
-			baseURL,
+			// Don't set baseURL - let Better Auth infer it from the request
+			// This allows the same build to work on localhost and production
 			trustedOrigins,
 			emailAndPassword: {
 				enabled: true,

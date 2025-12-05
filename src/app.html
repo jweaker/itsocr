@@ -3,6 +3,30 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script>
+			// Blocking script to prevent theme flash - runs before page paint
+			(function () {
+				try {
+					const stored = localStorage.getItem('theme');
+					let isDark = false;
+
+					if (stored === 'dark') {
+						isDark = true;
+					} else if (stored === 'light') {
+						isDark = false;
+					} else {
+						// System preference or no preference stored
+						isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+					}
+
+					if (isDark) {
+						document.documentElement.classList.add('dark');
+					}
+				} catch (e) {
+					// localStorage might not be available
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">

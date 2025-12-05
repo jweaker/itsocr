@@ -8,7 +8,7 @@ import { TRPCError } from '@trpc/server';
 import { router, protectedProcedure } from '../index.js';
 import { db } from '$lib/server/db';
 import { scannedImage } from '$lib/server/db/schema';
-import { eq, desc, and, lt } from 'drizzle-orm';
+import { eq, desc, and, lt, or, like, inArray } from 'drizzle-orm';
 import { buildPrompt } from '$lib/server/ocr';
 import { generateId, now, getFileExtension } from '$lib/server/utils';
 import { checkUploadLimits, incrementUsage } from '$lib/server/services/usage';
@@ -35,16 +35,28 @@ export const imagesRouter = router({
 			z.object({
 				limit: z.number().min(1).max(100).default(20),
 				cursor: z.string().optional(),
-				status: z.enum(['pending', 'processing', 'completed', 'failed']).optional()
+				status: z.enum(['pending', 'processing', 'completed', 'failed', 'cancelled']).optional(),
+				search: z.string().max(200).optional()
 			})
 		)
 		.query(async ({ ctx, input }) => {
-			const { limit, cursor, status } = input;
+			const { limit, cursor, status, search } = input;
 
 			const conditions = [eq(scannedImage.userId, ctx.user.id)];
 
 			if (status) {
 				conditions.push(eq(scannedImage.status, status));
+			}
+
+			// Search in fileName and extractedText
+			if (search && search.trim()) {
+				const searchPattern = `%${search.trim()}%`;
+				conditions.push(
+					or(
+						like(scannedImage.fileName, searchPattern),
+						like(scannedImage.extractedText, searchPattern)
+					)!
+				);
 			}
 
 			// Cursor-based pagination: use lt (less than) to avoid duplicates
@@ -141,10 +153,10 @@ export const imagesRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const platform = ctx.platform;
 
-			if (!platform?.env?.R2_BUCKET || !platform?.env?.OCR_QUEUE) {
+			if (!platform?.env?.R2_BUCKET) {
 				throw new TRPCError({
 					code: 'INTERNAL_SERVER_ERROR',
-					message: 'Storage or queue not configured'
+					message: 'Storage not configured'
 				});
 			}
 
@@ -169,7 +181,7 @@ export const imagesRouter = router({
 			const timestamp = now();
 			const originalUrl = `/api/images/${input.imageKey}`;
 
-			// Use transaction for atomicity
+			// Create the database record
 			await db.insert(scannedImage).values({
 				id: input.imageId,
 				userId: ctx.user.id,
@@ -188,15 +200,91 @@ export const imagesRouter = router({
 
 			await incrementUsage(ctx.user.id, input.fileSizeBytes);
 
+			// Build the prompt for OCR processing
 			const prompt = buildPrompt(input.customPrompt);
-			await platform.env.OCR_QUEUE.send({
-				imageId: input.imageId,
-				userId: ctx.user.id,
-				imageKey: input.imageKey,
-				prompt
+
+			// Return info for client to connect via WebSocket and trigger processing
+			return {
+				id: input.imageId,
+				status: 'pending',
+				wsUrl: `/api/ocr/${input.imageId}/ws`,
+				processUrl: `/api/ocr/${input.imageId}/process`,
+				processPayload: {
+					imageId: input.imageId,
+					userId: ctx.user.id,
+					imageKey: input.imageKey,
+					prompt
+				}
+			};
+		}),
+
+	rescan: protectedProcedure
+		.input(
+			z.object({
+				id: z.string().uuid(),
+				customPrompt: z.string().max(1000).optional()
+			})
+		)
+		.mutation(async ({ ctx, input }) => {
+			const platform = ctx.platform;
+
+			if (!platform?.env?.OCR_SESSION) {
+				throw new TRPCError({
+					code: 'INTERNAL_SERVER_ERROR',
+					message: 'OCR service not configured'
+				});
+			}
+
+			// Get the existing image
+			const existing = await db.query.scannedImage.findFirst({
+				where: and(eq(scannedImage.id, input.id), eq(scannedImage.userId, ctx.user.id))
 			});
 
-			return { id: input.imageId, status: 'pending' };
+			if (!existing) {
+				throw new TRPCError({
+					code: 'NOT_FOUND',
+					message: 'Image not found'
+				});
+			}
+
+			// Update custom prompt if provided
+			const newPrompt =
+				input.customPrompt !== undefined ? input.customPrompt : existing.customPrompt;
+
+			// Reset the image status to pending
+			await db
+				.update(scannedImage)
+				.set({
+					status: 'pending',
+					extractedText: null,
+					errorMessage: null,
+					processingTimeMs: null,
+					customPrompt: newPrompt || null,
+					updatedAt: now()
+				})
+				.where(eq(scannedImage.id, input.id));
+
+			// Reset the DO session state
+			const doId = platform.env.OCR_SESSION.idFromName(input.id);
+			const stub = platform.env.OCR_SESSION.get(doId);
+
+			await stub.fetch(new Request('https://do/reset', { method: 'POST' }));
+
+			// Build the prompt for OCR processing
+			const prompt = buildPrompt(newPrompt);
+
+			return {
+				id: input.id,
+				status: 'pending',
+				wsUrl: `/api/ocr/${input.id}/ws`,
+				processUrl: `/api/ocr/${input.id}/process`,
+				processPayload: {
+					imageId: input.id,
+					userId: ctx.user.id,
+					imageKey: existing.imageKey,
+					prompt
+				}
+			};
 		}),
 
 	delete: protectedProcedure
@@ -224,5 +312,42 @@ export const imagesRouter = router({
 			]);
 
 			return { success: true };
+		}),
+
+	bulkDelete: protectedProcedure
+		.input(z.object({ ids: z.array(z.string().uuid()).min(1).max(100) }))
+		.mutation(async ({ ctx, input }) => {
+			const { ids } = input;
+
+			// Get all images that belong to this user
+			const existingImages = await db.query.scannedImage.findMany({
+				where: and(eq(scannedImage.userId, ctx.user.id), inArray(scannedImage.id, ids)),
+				columns: { id: true, imageKey: true }
+			});
+
+			if (existingImages.length === 0) {
+				throw new TRPCError({
+					code: 'NOT_FOUND',
+					message: 'No images found'
+				});
+			}
+
+			const platform = ctx.platform;
+			const imageKeys = existingImages.map((img) => img.imageKey).filter(Boolean) as string[];
+			const imageIds = existingImages.map((img) => img.id);
+
+			// Delete from R2 and DB in parallel
+			await Promise.all([
+				// Delete all images from R2
+				platform?.env?.R2_BUCKET && imageKeys.length > 0
+					? Promise.all(imageKeys.map((key) => platform.env.R2_BUCKET.delete(key)))
+					: Promise.resolve(),
+				// Delete all from DB
+				db
+					.delete(scannedImage)
+					.where(and(eq(scannedImage.userId, ctx.user.id), inArray(scannedImage.id, imageIds)))
+			]);
+
+			return { success: true, deletedCount: existingImages.length };
 		})
 });

@@ -1,5 +1,9 @@
 // Default OCR prompt for text extraction (hardcoded, not saved to DB)
-export const DEFAULT_OCR_PROMPT = `Extract all text visible in this image. Preserve the original formatting, line breaks, and structure as much as possible. Return only the extracted text without any commentary or explanations.`;
+export const DEFAULT_OCR_PROMPT = `Extract all text from this image exactly as it appears. Preserve the original formatting and line breaks. Only output the text, nothing else.`;
+
+// Model configuration
+export const OCR_MODEL = 'minicpm-v';
+export const OCR_MAX_TOKENS = 4096;
 
 /**
  * Build the full prompt by combining default prompt with user's custom prompt
@@ -36,7 +40,7 @@ export interface OCRResult {
 }
 
 /**
- * Process an image with Ollama LLaVA model for OCR
+ * Process an image with Ollama vision model for OCR
  */
 export async function processImageWithOllama(
 	ollamaEndpoint: string,
@@ -52,10 +56,14 @@ export async function processImageWithOllama(
 				'Content-Type': 'application/json'
 			},
 			body: JSON.stringify({
-				model: 'llava:latest',
+				model: OCR_MODEL,
 				prompt: prompt,
 				images: [imageBase64],
-				stream: false
+				stream: false,
+				options: {
+					temperature: 0,
+					num_predict: OCR_MAX_TOKENS
+				}
 			})
 		});
 

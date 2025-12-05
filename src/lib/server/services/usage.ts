@@ -136,12 +136,17 @@ export async function getUserPlan(userId: string) {
 
 /**
  * Check if user can upload based on their plan limits
- * Runs queries in parallel for better performance
+ * Currently disabled - always allows uploads
  */
 export async function checkUploadLimits(
 	userId: string,
 	fileSizeBytes: number
 ): Promise<{ allowed: boolean; error?: string }> {
+	// TODO: Re-enable limits when ready for production
+	// For now, allow all uploads
+	return { allowed: true };
+
+	/*
 	// Run both queries in parallel
 	const [usage, plan] = await Promise.all([getCurrentUsage(userId), getUserPlan(userId)]);
 
@@ -160,4 +165,5 @@ export async function checkUploadLimits(
 	}
 
 	return { allowed: true };
+	*/
 }

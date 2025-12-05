@@ -13,20 +13,21 @@ binding = "ASSETS"
 binding = "R2_BUCKET"
 bucket_name = "itsocr-images"
 
-# Queue for OCR processing jobs
-[[queues.producers]]
-binding = "OCR_QUEUE"
-queue = "itsocr-ocr-queue"
+# Durable Objects for WebSocket connections
+[durable_objects]
+bindings = [
+  { name = "OCR_SESSION", class_name = "OCRSession" },
+  { name = "DASHBOARD_SESSIONS", class_name = "DashboardSessions" }
+]
 
-[[queues.consumers]]
-queue = "itsocr-ocr-queue"
-max_batch_size = 1
-max_batch_timeout = 30
-max_retries = 3
+# DO migrations
+[[migrations]]
+tag = "v1"
+new_classes = ["OCRSession", "DashboardSessions"]
 
 # Environment variables (set via wrangler secret or dashboard)
 # These are placeholders - actual values set in Cloudflare dashboard or via `wrangler secret put`
-# Note: OLLAMA_ENDPOINT is hardcoded to https://ollama.itsocr.com in the queue handler
+# Note: OLLAMA_ENDPOINT is hardcoded to https://ollama.itsocr.com in the DO
 [vars]
 # DATABASE_URL = "libsql://..."
 # DATABASE_AUTH_TOKEN = "..."

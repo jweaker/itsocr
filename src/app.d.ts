@@ -1,4 +1,6 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
+/// <reference types="@cloudflare/workers-types" />
+
 import type { auth } from '$lib/server/auth';
 
 declare global {
@@ -13,8 +15,8 @@ declare global {
 		interface Platform {
 			env: {
 				R2_BUCKET: R2Bucket;
-				OCR_QUEUE: Queue<OCRJobMessage>;
-				// OLLAMA_ENDPOINT is hardcoded in queue handler to https://ollama.itsocr.com
+				OCR_SESSION: DurableObjectNamespace;
+				DASHBOARD_SESSIONS: DurableObjectNamespace;
 				DATABASE_URL: string;
 				DATABASE_AUTH_TOKEN: string;
 				BETTER_AUTH_SECRET: string;
@@ -27,14 +29,6 @@ declare global {
 			context: ExecutionContext;
 			caches: CacheStorage & { default: Cache };
 		}
-	}
-
-	// OCR Queue message type
-	interface OCRJobMessage {
-		imageId: string;
-		userId: string;
-		imageKey: string;
-		prompt: string;
 	}
 }
 

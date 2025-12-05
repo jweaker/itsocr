@@ -5,32 +5,19 @@
 
 import { router, protectedProcedure } from '../index.js';
 import { db } from '$lib/server/db';
-import { scannedImage } from '$lib/server/db/schema';
-import { eq, desc, and, gte, lte, sql } from 'drizzle-orm';
-import { getMonthPeriod } from '$lib/server/utils';
+import { scannedImage, usageRecord } from '$lib/server/db/schema';
+import { eq, desc, sql } from 'drizzle-orm';
 import { getCurrentUsage, getUserPlan } from '$lib/server/services/usage';
 
 export const dashboardRouter = router({
 	getStats: protectedProcedure.query(async ({ ctx }) => {
-		const { start, end } = getMonthPeriod();
-
 		// Run queries in parallel for better performance
-		const [totalImagesResult, monthImagesResult, recentImages, usage, plan] = await Promise.all([
+		const [totalScansResult, recentImages, usage, plan] = await Promise.all([
+			// Sum all imagesScanned from all usage records for this user (all-time total)
 			db
-				.select({ count: sql<number>`count(*)` })
-				.from(scannedImage)
-				.where(eq(scannedImage.userId, ctx.user.id)),
-
-			db
-				.select({ count: sql<number>`count(*)` })
-				.from(scannedImage)
-				.where(
-					and(
-						eq(scannedImage.userId, ctx.user.id),
-						gte(scannedImage.createdAt, start),
-						lte(scannedImage.createdAt, end)
-					)
-				),
+				.select({ total: sql<number>`COALESCE(SUM(${usageRecord.imagesScanned}), 0)` })
+				.from(usageRecord)
+				.where(eq(usageRecord.userId, ctx.user.id)),
 
 			db.query.scannedImage.findMany({
 				where: eq(scannedImage.userId, ctx.user.id),
@@ -43,8 +30,10 @@ export const dashboardRouter = router({
 		]);
 
 		return {
-			totalImages: totalImagesResult[0]?.count ?? 0,
-			imagesThisMonth: monthImagesResult[0]?.count ?? 0,
+			// Total scans ever (from usage records, not images table)
+			totalScans: totalScansResult[0]?.total ?? 0,
+			// Scans this month (from current usage record)
+			scansThisMonth: usage.imagesScanned,
 			recentImages,
 			usage: {
 				used: usage.imagesScanned,
