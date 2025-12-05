@@ -66,6 +66,9 @@ importers:
       drizzle-orm:
         specifier: ^0.44.7
         version: 0.44.7(@cloudflare/workers-types@4.20251205.0)(@libsql/client@0.15.15)(kysely@0.28.8)
+      esbuild:
+        specifier: ^0.27.1
+        version: 0.27.1
       eslint:
         specifier: ^9.39.1
         version: 9.39.1(jiti@2.6.1)
