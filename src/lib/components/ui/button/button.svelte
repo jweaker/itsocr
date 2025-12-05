@@ -42,6 +42,10 @@
 </script>
 
 <script lang="ts">
+	type $$Events = {
+		click: MouseEvent;
+	};
+
 	let {
 		class: className,
 		variant = "default",
