@@ -65,9 +65,12 @@ async function handleQueue(batch, env) {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
       
+      // Hardcoded Ollama endpoint
+      const OLLAMA_ENDPOINT = 'https://ollama.itsocr.com';
+      
       let response;
       try {
-        response = await fetch(env.OLLAMA_ENDPOINT + '/api/generate', {
+        response = await fetch(OLLAMA_ENDPOINT + '/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

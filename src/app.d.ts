@@ -14,7 +14,7 @@ declare global {
 			env: {
 				R2_BUCKET: R2Bucket;
 				OCR_QUEUE: Queue<OCRJobMessage>;
-				OLLAMA_ENDPOINT: string;
+				// OLLAMA_ENDPOINT is hardcoded in queue handler to https://ollama.itsocr.com
 				DATABASE_URL: string;
 				DATABASE_AUTH_TOKEN: string;
 				BETTER_AUTH_SECRET: string;

@@ -5,15 +5,15 @@
 		DialogDescription,
 		DialogFooter,
 		DialogHeader,
-		DialogTitle,
-	} from "$lib/components/ui/dialog";
-	import { Button } from "$lib/components/ui/button";
-	import { Input } from "$lib/components/ui/input";
-	import { Textarea } from "$lib/components/ui/textarea";
-	import { Label } from "$lib/components/ui/label";
-	import { Switch } from "$lib/components/ui/switch";
-	import { Tabs, TabsList, TabsTrigger, TabsContent } from "$lib/components/ui/tabs";
-	import { Select, SelectContent, SelectItem, SelectTrigger } from "$lib/components/ui/select";
+		DialogTitle
+	} from '$lib/components/ui/dialog';
+	import { Button } from '$lib/components/ui/button';
+	import { Input } from '$lib/components/ui/input';
+	import { Textarea } from '$lib/components/ui/textarea';
+	import { Label } from '$lib/components/ui/label';
+	import { Switch } from '$lib/components/ui/switch';
+	import { Tabs, TabsList, TabsTrigger, TabsContent } from '$lib/components/ui/tabs';
+	import { Select, SelectContent, SelectItem, SelectTrigger } from '$lib/components/ui/select';
 
 	interface Props {
 		open?: boolean;
@@ -21,35 +21,35 @@
 		imageAlt?: string;
 	}
 
-	let { open = $bindable(false), imageUrl = "", imageAlt = "" }: Props = $props();
+	let { open = $bindable(false), imageUrl = '', imageAlt = '' }: Props = $props();
 
 	const maxImagesPerUser = 5;
 	let usedImages = $state(0);
 
-	let activeTab = $state("new");
-	let title = $state("");
-	let description = $state("");
-	let tags = $state("");
+	let activeTab = $state('new');
+	let title = $state('');
+	let description = $state('');
+	let tags = $state('');
 
 	let file: File | null = $state(null);
 	let filePreview: string | null = $state(null);
 
-	let language = $state("en");
-	let model = $state("llava");
+	let language = $state('en');
+	let model = $state('llava');
 	let runOcr = $state(true);
 	let saveToHistory = $state(true);
 
-	let cacheMode = $state("auto");
-	let accessToken = $state("");
+	let cacheMode = $state('auto');
+	let accessToken = $state('');
 
-	const languageLabels: Record<string, string> = { en: "English", ar: "Arabic", fr: "French" };
+	const languageLabels: Record<string, string> = { en: 'English', ar: 'Arabic', fr: 'French' };
 	const modelLabels: Record<string, string> = {
-		llava: "Ollama LLaVA",
-		custom: "Custom model",
+		llava: 'Ollama LLaVA',
+		custom: 'Custom model'
 	};
 	const cacheModeLabels: Record<string, string> = {
-		auto: "Auto - use cached result if available",
-		force: "Force - always reprocess the image",
+		auto: 'Auto - use cached result if available',
+		force: 'Force - always reprocess the image'
 	};
 
 	function handleFileChange(event: Event) {
@@ -134,7 +134,7 @@
 						<Label>Preview</Label>
 						<img
 							src={filePreview ?? imageUrl}
-							alt={imageAlt || "Selected image"}
+							alt={imageAlt || 'Selected image'}
 							class="max-h-64 w-auto rounded-md border object-contain"
 						/>
 					</div>
@@ -153,7 +153,7 @@
 							<Select bind:value={language} type="single">
 								<SelectTrigger class="w-full">
 									<span data-slot="select-value" class="truncate">
-										{languageLabels[language] ?? "Select language"}
+										{languageLabels[language] ?? 'Select language'}
 									</span>
 								</SelectTrigger>
 								<SelectContent>
@@ -171,7 +171,7 @@
 							<Select bind:value={model} type="single">
 								<SelectTrigger class="w-full">
 									<span data-slot="select-value" class="truncate">
-										{modelLabels[model] ?? "Select model"}
+										{modelLabels[model] ?? 'Select model'}
 									</span>
 								</SelectTrigger>
 								<SelectContent>
@@ -211,16 +211,12 @@
 						<Select bind:value={cacheMode} type="single">
 							<SelectTrigger class="w-full">
 								<span data-slot="select-value" class="truncate">
-									{cacheModeLabels[cacheMode] ?? "Select cache behavior"}
+									{cacheModeLabels[cacheMode] ?? 'Select cache behavior'}
 								</span>
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="auto">
-									Auto - use cached result if available
-								</SelectItem>
-								<SelectItem value="force">
-									Force - always reprocess the image
-								</SelectItem>
+								<SelectItem value="auto">Auto - use cached result if available</SelectItem>
+								<SelectItem value="force">Force - always reprocess the image</SelectItem>
 							</SelectContent>
 						</Select>
 					</div>

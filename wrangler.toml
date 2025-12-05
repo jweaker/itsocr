@@ -26,8 +26,8 @@ max_retries = 3
 
 # Environment variables (set via wrangler secret or dashboard)
 # These are placeholders - actual values set in Cloudflare dashboard or via `wrangler secret put`
+# Note: OLLAMA_ENDPOINT is hardcoded to https://ollama.itsocr.com in the queue handler
 [vars]
-# OLLAMA_ENDPOINT = "https://your-tunnel.domain.com"
 # DATABASE_URL = "libsql://..."
 # DATABASE_AUTH_TOKEN = "..."
 # BETTER_AUTH_SECRET = "..."

@@ -1,12 +1,22 @@
 import { initTRPC, TRPCError } from '@trpc/server';
 import type { RequestEvent } from '@sveltejs/kit';
-import { auth } from '$lib/server/auth';
+import { auth, isAuthConfigured } from '$lib/server/auth';
 
 // Create context from SvelteKit request event
 export const createContext = async (event: RequestEvent) => {
-	const session = await auth.api.getSession({
-		headers: event.request.headers
-	});
+	let session = null;
+
+	// Only try to get session if auth is configured
+	if (isAuthConfigured()) {
+		try {
+			session = await auth.api.getSession({
+				headers: event.request.headers
+			});
+		} catch (e) {
+			// Log but don't throw - allow public procedures to work
+			console.error('Failed to get session:', e);
+		}
+	}
 
 	return {
 		event,
