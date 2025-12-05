@@ -71,9 +71,55 @@
 	let hasMore = $state(false);
 	let isLoadingMore = $state(false);
 
+	// Polling for pending images
+	let pollInterval = $state<ReturnType<typeof setInterval> | null>(null);
+
 	onMount(() => {
 		loadDashboard();
+
+		// Cleanup polling on unmount
+		return () => {
+			if (pollInterval) {
+				clearInterval(pollInterval);
+			}
+		};
 	});
+
+	// Check if there are any pending/processing images
+	function hasPendingImages(): boolean {
+		return images.some((img) => img.status === 'pending' || img.status === 'processing');
+	}
+
+	// Start/stop polling based on pending images
+	function updatePolling() {
+		if (hasPendingImages() && !pollInterval) {
+			// Start polling every 3 seconds
+			pollInterval = setInterval(async () => {
+				try {
+					const [statsData, imagesData] = await Promise.all([
+						trpc.dashboard.getStats.query(),
+						trpc.images.list.query({ limit: 20 })
+					]);
+					stats = statsData;
+					images = imagesData.images;
+					nextCursor = imagesData.nextCursor;
+					hasMore = !!imagesData.nextCursor;
+
+					// Stop polling if no more pending images
+					if (!hasPendingImages() && pollInterval) {
+						clearInterval(pollInterval);
+						pollInterval = null;
+					}
+				} catch (e) {
+					console.error('Polling failed:', e);
+				}
+			}, 3000);
+		} else if (!hasPendingImages() && pollInterval) {
+			// Stop polling if no pending images
+			clearInterval(pollInterval);
+			pollInterval = null;
+		}
+	}
 
 	async function loadDashboard() {
 		isLoading = true;
@@ -87,6 +133,9 @@
 			images = imagesData.images;
 			nextCursor = imagesData.nextCursor;
 			hasMore = !!imagesData.nextCursor;
+
+			// Start polling if there are pending images
+			updatePolling();
 		} catch (e) {
 			console.error('Failed to load dashboard:', e);
 			error = e instanceof Error ? e.message : 'Failed to load dashboard';
@@ -171,9 +220,9 @@
 				customPrompt: customPrompt || undefined
 			});
 
-			// 4. Close modal and refresh
+			// 4. Close modal and navigate to image page
 			closeUploadModal();
-			await loadDashboard();
+			goto(`/image/${imageId}`);
 		} catch (e) {
 			console.error('Upload failed:', e);
 			uploadError = e instanceof Error ? e.message : 'Upload failed';
