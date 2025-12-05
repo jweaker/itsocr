@@ -1,76 +1,9 @@
-import { integer, sqliteTable, text, index, real } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text, index, real, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
-// =============================================================================
-// Hardcoded Plans
-// =============================================================================
-
-export type PlanId = 'free' | 'pro' | 'enterprise';
-
-export interface Plan {
-	id: PlanId;
-	name: string;
-	displayName: string;
-	description: string;
-	priceMonthly: number; // in cents
-	priceYearly: number; // in cents
-	imagesPerMonth: number; // -1 for unlimited
-	maxImageSizeMb: number;
-	priorityProcessing: boolean;
-	apiAccess: boolean;
-	retentionDays: number;
-}
-
-export const PLANS: Record<PlanId, Plan> = {
-	free: {
-		id: 'free',
-		name: 'free',
-		displayName: 'Free',
-		description: 'Perfect for trying out the service',
-		priceMonthly: 0,
-		priceYearly: 0,
-		imagesPerMonth: 10,
-		maxImageSizeMb: 5,
-		priorityProcessing: false,
-		apiAccess: false,
-		retentionDays: 7
-	},
-	pro: {
-		id: 'pro',
-		name: 'pro',
-		displayName: 'Pro',
-		description: 'For individuals and small teams',
-		priceMonthly: 999, // $9.99
-		priceYearly: 9990, // $99.90 (2 months free)
-		imagesPerMonth: 500,
-		maxImageSizeMb: 20,
-		priorityProcessing: true,
-		apiAccess: false,
-		retentionDays: 90
-	},
-	enterprise: {
-		id: 'enterprise',
-		name: 'enterprise',
-		displayName: 'Enterprise',
-		description: 'For large teams with advanced needs',
-		priceMonthly: 4999, // $49.99
-		priceYearly: 49990, // $499.90 (2 months free)
-		imagesPerMonth: -1, // unlimited
-		maxImageSizeMb: 50,
-		priorityProcessing: true,
-		apiAccess: true,
-		retentionDays: 365
-	}
-};
-
-export const PLAN_LIST = Object.values(PLANS);
-
-export function getPlan(planId: PlanId | string | null | undefined): Plan {
-	if (planId && planId in PLANS) {
-		return PLANS[planId as PlanId];
-	}
-	return PLANS.free;
-}
+// Re-export plan types and utilities from config
+// Note: Using relative import for drizzle-kit compatibility (it runs outside SvelteKit bundler)
+export { type PlanId, type Plan, PLANS, PLAN_LIST, getPlan } from '../config/plans';
 
 // =============================================================================
 // Better Auth tables (with custom planId field)
@@ -139,12 +72,14 @@ export const scannedImage = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		fileName: text('file_name').notNull(),
-		originalUrl: text('original_url').notNull(),
+		imageKey: text('image_key').notNull(), // R2 object key
+		originalUrl: text('original_url').notNull(), // URL to access the image
 		thumbnailUrl: text('thumbnail_url'),
 		mimeType: text('mime_type').notNull(),
 		fileSizeBytes: integer('file_size_bytes').notNull(),
 		width: integer('width'),
 		height: integer('height'),
+		customPrompt: text('custom_prompt'), // User's custom addition to the default prompt
 		extractedText: text('extracted_text'),
 		confidence: real('confidence'),
 		language: text('language'),
@@ -158,7 +93,8 @@ export const scannedImage = sqliteTable(
 	(table) => [
 		index('scanned_image_user_idx').on(table.userId),
 		index('scanned_image_created_idx').on(table.createdAt),
-		index('scanned_image_status_idx').on(table.status)
+		index('scanned_image_status_idx').on(table.status),
+		uniqueIndex('scanned_image_key_idx').on(table.imageKey)
 	]
 );
 
@@ -182,7 +118,9 @@ export const usageRecord = sqliteTable(
 	},
 	(table) => [
 		index('usage_record_user_idx').on(table.userId),
-		index('usage_record_period_idx').on(table.periodStart, table.periodEnd)
+		index('usage_record_period_idx').on(table.periodStart, table.periodEnd),
+		// Composite index for efficient lookups by user and period
+		uniqueIndex('usage_record_user_period_idx').on(table.userId, table.periodStart)
 	]
 );
 

@@ -1,5 +1,4 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
-// for information about these interfaces
 import type { auth } from '$lib/server/auth';
 
 declare global {
@@ -11,7 +10,31 @@ declare global {
 		}
 		// interface PageData {}
 		// interface PageState {}
-		// interface Platform {}
+		interface Platform {
+			env: {
+				R2_BUCKET: R2Bucket;
+				OCR_QUEUE: Queue<OCRJobMessage>;
+				OLLAMA_ENDPOINT: string;
+				DATABASE_URL: string;
+				DATABASE_AUTH_TOKEN: string;
+				BETTER_AUTH_SECRET: string;
+				BETTER_AUTH_BASE_URL: string;
+				BETTER_AUTH_GITHUB_CLIENT_ID?: string;
+				BETTER_AUTH_GITHUB_CLIENT_SECRET?: string;
+				BETTER_AUTH_GOOGLE_CLIENT_ID?: string;
+				BETTER_AUTH_GOOGLE_CLIENT_SECRET?: string;
+			};
+			context: ExecutionContext;
+			caches: CacheStorage & { default: Cache };
+		}
+	}
+
+	// OCR Queue message type
+	interface OCRJobMessage {
+		imageId: string;
+		userId: string;
+		imageKey: string;
+		prompt: string;
 	}
 }
 

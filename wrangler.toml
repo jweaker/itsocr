@@ -1,0 +1,38 @@
+name = "itsocr"
+compatibility_date = "2025-06-05"
+compatibility_flags = ["nodejs_compat"]
+main = ".svelte-kit/cloudflare/_worker.js"
+
+# Static assets configuration
+[assets]
+directory = ".svelte-kit/cloudflare"
+binding = "ASSETS"
+
+# R2 Bucket for image storage
+[[r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "itsocr-images"
+
+# Queue for OCR processing jobs
+[[queues.producers]]
+binding = "OCR_QUEUE"
+queue = "itsocr-ocr-queue"
+
+[[queues.consumers]]
+queue = "itsocr-ocr-queue"
+max_batch_size = 1
+max_batch_timeout = 30
+max_retries = 3
+
+# Environment variables (set via wrangler secret or dashboard)
+# These are placeholders - actual values set in Cloudflare dashboard or via `wrangler secret put`
+[vars]
+# OLLAMA_ENDPOINT = "https://your-tunnel.domain.com"
+# DATABASE_URL = "libsql://..."
+# DATABASE_AUTH_TOKEN = "..."
+# BETTER_AUTH_SECRET = "..."
+# BETTER_AUTH_BASE_URL = "..."
+# BETTER_AUTH_GITHUB_CLIENT_ID = "..."
+# BETTER_AUTH_GITHUB_CLIENT_SECRET = "..."
+# BETTER_AUTH_GOOGLE_CLIENT_ID = "..."
+# BETTER_AUTH_GOOGLE_CLIENT_SECRET = "..."

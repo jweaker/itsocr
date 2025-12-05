@@ -11,7 +11,9 @@ export const createContext = async (event: RequestEvent) => {
 	return {
 		event,
 		session,
-		user: session?.user ?? null
+		user: session?.user ?? null,
+		// Cloudflare platform bindings (R2, Queue, etc.)
+		platform: event.platform
 	};
 };
 
