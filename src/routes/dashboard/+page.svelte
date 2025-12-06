@@ -12,6 +12,7 @@
 	import { Label } from '$lib/components/ui/label';
 	import { Textarea } from '$lib/components/ui/textarea';
 	import ThemeToggle from '$lib/components/ThemeToggle.svelte';
+	import { Progress } from '$lib/components/ui/progress';
 	import {
 		resizeImage,
 		getImageFromClipboard,
@@ -706,17 +707,17 @@
 				</Button>
 				<ThemeToggle showLabel />
 				<DropdownMenu.Root>
-					<DropdownMenu.Trigger>
-						<Button variant="ghost" class="relative h-8 w-8 rounded-full sm:h-9 sm:w-9">
-							<Avatar.Root class="h-8 w-8 sm:h-9 sm:w-9">
-								{#if data.user.image}
-									<Avatar.Image src={data.user.image} alt={data.user.name} />
-								{/if}
-								<Avatar.Fallback class="bg-primary/10 text-xs text-primary sm:text-sm">
-									{getUserInitials(data.user.name)}
-								</Avatar.Fallback>
-							</Avatar.Root>
-						</Button>
+					<DropdownMenu.Trigger
+						class="relative flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent sm:h-9 sm:w-9"
+					>
+						<Avatar.Root class="h-8 w-8 sm:h-9 sm:w-9">
+							{#if data.user.image}
+								<Avatar.Image src={data.user.image} alt={data.user.name} />
+							{/if}
+							<Avatar.Fallback class="bg-primary/10 text-xs text-primary sm:text-sm">
+								{getUserInitials(data.user.name)}
+							</Avatar.Fallback>
+						</Avatar.Root>
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content align="end" class="w-48 sm:w-56">
 						<DropdownMenu.Label>
@@ -830,6 +831,16 @@
 							<div class="flex items-center gap-1.5">
 								<span class="text-xs text-muted-foreground">Plan</span>
 								<span class="text-sm font-semibold capitalize">{stats.plan.name}</span>
+							</div>
+							<div class="h-3 w-px bg-border sm:h-4"></div>
+							<div class="flex items-center gap-2">
+								<span class="text-xs text-muted-foreground">Usage</span>
+								<div class="flex items-center gap-1.5">
+									<Progress value={stats.usage.percentage} max={100} class="h-2 w-16 sm:w-20" />
+									<span class="text-xs font-medium">
+										{stats.usage.used}/{stats.usage.limit === -1 ? '∞' : stats.usage.limit}
+									</span>
+								</div>
 							</div>
 						</div>
 					</div>
@@ -945,34 +956,30 @@
 
 								<!-- Export dropdown -->
 								<DropdownMenu.Root>
-									<DropdownMenu.Trigger>
-										<Button
-											variant="outline"
-											size="sm"
-											class="h-7 gap-1.5 px-2 text-xs"
-											disabled={isExporting}
-										>
-											{#if isExporting}
-												<div
-													class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
-												></div>
-											{:else}
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													viewBox="0 0 24 24"
-													stroke="currentColor"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-													/>
-												</svg>
-											{/if}
-											Export
-										</Button>
+									<DropdownMenu.Trigger
+										class="inline-flex h-7 items-center justify-center gap-1.5 rounded-md border border-input bg-background px-2 text-xs font-medium hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50"
+										disabled={isExporting}
+									>
+										{#if isExporting}
+											<div
+												class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+											></div>
+										{:else}
+											<svg
+												class="h-3.5 w-3.5"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+												/>
+											</svg>
+										{/if}
+										Export
 									</DropdownMenu.Trigger>
 									<DropdownMenu.Content align="start">
 										<DropdownMenu.Item onclick={() => exportSelected('json')}>

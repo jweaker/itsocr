@@ -10,6 +10,8 @@ const config = {
 				include: ['/*'],
 				exclude: ['<all>']
 			}
+			// Platform proxy disabled - it causes HMR full page reloads
+			// Use `pnpm preview` for full Cloudflare bindings
 		})
 	}
 };

@@ -5,7 +5,6 @@ import { defineConfig } from 'vite';
 export default defineConfig({
 	plugins: [tailwindcss(), sveltekit()],
 	ssr: {
-		// Fix CommonJS/ESM interop issues
 		noExternal: ['ms']
 	}
 });

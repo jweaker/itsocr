@@ -75,52 +75,21 @@ wrangler secret put BETTER_AUTH_SECRET
 
 ## Development
 
-There are two dev modes with different trade-offs:
-
-### `pnpm dev` (Vite)
-
 ```bash
-pnpm dev
-# → http://localhost:5173
+pnpm dev      # Vite with HMR (fast, but no Durable Objects)
+pnpm preview  # Full Cloudflare environment (slower, but everything works)
 ```
 
-- Fast HMR
-- No Cloudflare bindings (R2, Durable Objects unavailable)
-- Use for: UI work, styling, layout
-
-### `wrangler dev` (Full Cloudflare)
-
-```bash
-pnpm build
-wrangler dev
-# → http://localhost:8787
-```
-
-- Full Workers environment with all bindings
-- R2, Durable Objects, everything works
-- Slower rebuilds
-- Use for: Testing OCR, WebSockets, uploads
-
-**Recommended workflow** for feature development:
-
-```bash
-# Terminal 1
-pnpm build --watch
-
-# Terminal 2
-wrangler dev
-```
+- **`pnpm dev`**: Fast HMR for UI work. R2 works via platform proxy, but Durable Objects don't (Cloudflare limitation).
+- **`pnpm preview`**: Builds and runs with wrangler. Full Cloudflare bindings including Durable Objects. Use for testing OCR/WebSockets.
 
 ## Database
 
-Run migrations:
-
 ```bash
 pnpm db:generate  # Generate migration files
-pnpm db:migrate   # Apply to Turso
+pnpm db:push      # Push schema to Turso
+pnpm db:studio    # Open Drizzle Studio
 ```
-
-Local development uses `file:local.db` by default.
 
 ## Deployment
 

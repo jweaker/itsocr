@@ -71,8 +71,8 @@ function createAuth() {
 				}
 			}),
 			secret,
-			// Don't set baseURL - let Better Auth infer it from the request
-			// This allows the same build to work on localhost and production
+			// In dev mode, always use localhost. In production, use BETTER_AUTH_BASE_URL
+			baseURL: dev ? 'http://localhost:5173' : env.BETTER_AUTH_BASE_URL,
 			trustedOrigins,
 			emailAndPassword: {
 				enabled: true,
