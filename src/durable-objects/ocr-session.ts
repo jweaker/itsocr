@@ -13,16 +13,15 @@ import { createClient } from '@libsql/client/web';
 const OCR_MODEL = 'llama3.2-vision:latest';
 const OCR_OPTIONS = {
 	temperature: 0, // Deterministic output for accuracy
-	num_predict: 16384,
+	num_predict: 8192, // Hard cap - enough for most documents (~6k words)
 	num_ctx: 16384,
 	num_gpu: 999,
 	main_gpu: 0,
 	num_thread: 8,
-	repeat_penalty: 1.1, // Light penalty to avoid repetition without stopping early
-	repeat_last_n: 64, // Shorter lookback to avoid false repetition detection
-	top_k: 40, // Wider token selection to avoid early stopping
-	top_p: 0.9, // Less restrictive sampling
-	stop: [] as string[] // No stop sequences - extract all text
+	repeat_penalty: 1.5, // Strong penalty to stop repetition loops
+	repeat_last_n: 256, // Long lookback to catch repetitive patterns early
+	top_k: 10, // Focused token selection for deterministic OCR
+	top_p: 0.7 // Tighter sampling to avoid hallucinations
 };
 
 interface Env {

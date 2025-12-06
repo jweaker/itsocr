@@ -6,19 +6,18 @@ export const OCR_CONTEXT_SIZE = 16384;
 // Parallel processing configuration for PDFs
 export const PDF_PARALLEL_PAGES = 4; // Process 4 pages at a time on A5000
 
-// Ollama options optimized for OCR accuracy and completeness
+// Ollama options optimized for OCR accuracy and preventing infinite loops
 export const OCR_OPTIONS = {
 	temperature: 0, // Deterministic output for accuracy
-	num_predict: OCR_MAX_TOKENS,
+	num_predict: 8192, // Hard cap - enough for most documents (~6k words)
 	num_ctx: OCR_CONTEXT_SIZE,
 	num_gpu: 999,
 	main_gpu: 0,
 	num_thread: 8,
-	repeat_penalty: 1.1, // Light penalty to avoid repetition without stopping early
-	repeat_last_n: 64, // Shorter lookback to avoid false repetition detection
-	top_k: 40, // Wider token selection to avoid early stopping
-	top_p: 0.9, // Less restrictive sampling
-	stop: [] // No stop sequences - extract all text
+	repeat_penalty: 1.5, // Strong penalty to stop repetition loops
+	repeat_last_n: 256, // Long lookback to catch repetitive patterns early
+	top_k: 10, // Focused token selection for deterministic OCR
+	top_p: 0.7 // Tighter sampling to avoid hallucinations
 };
 
 /**
@@ -27,21 +26,8 @@ export const OCR_OPTIONS = {
 export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
-	// Assertive, detailed prompt that leaves no room for interpretation
-	const basePrompt = `You are an OCR machine. You ONLY output the exact text from images. You are NOT a chatbot. You do NOT explain, summarize, or add notes.
-
-RULES:
-- Output ONLY the raw text from the image
-- Start with the first word in the image
-- End with the last word in the image
-- Never write "Note:", "The text says:", or any commentary
-- Never describe the image
-- Never explain what you did
-- Preserve line breaks and paragraphs
-- Include all text: headers, body, footers, captions, watermarks
-- If you cannot read something, skip it silently
-
-BEGIN OUTPUT:`;
+	// Concise, direct prompt optimized for OCR without causing loops
+	const basePrompt = `Extract all visible text from this image exactly as it appears. Output only the text, preserve formatting and line breaks.`;
 
 	if (!custom) {
 		return basePrompt;
@@ -50,9 +36,7 @@ BEGIN OUTPUT:`;
 	// Custom prompt is appended to base prompt
 	return `${basePrompt}
 
-USER REQUEST: ${custom}
-
-BEGIN OUTPUT:`;
+Additional instructions: ${custom}`;
 }
 
 /**
