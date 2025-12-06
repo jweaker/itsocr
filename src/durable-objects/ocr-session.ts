@@ -124,7 +124,10 @@ export class OCRSession implements DurableObject {
 	}
 
 	private async handleProcess(request: Request): Promise<Response> {
+		console.log('[OCRSession] handleProcess called, isProcessing:', this.isProcessing);
+
 		if (this.isProcessing) {
+			console.log('[OCRSession] Already processing, rejecting');
 			return new Response(JSON.stringify({ error: 'Already processing' }), {
 				status: 409,
 				headers: { 'Content-Type': 'application/json' }
@@ -133,6 +136,8 @@ export class OCRSession implements DurableObject {
 
 		try {
 			const body = (await request.json()) as ProcessRequest;
+			console.log('[OCRSession] Starting process for image:', body.imageId);
+
 			this.imageId = body.imageId;
 			this.userId = body.userId;
 			this.isProcessing = true;
@@ -149,6 +154,7 @@ export class OCRSession implements DurableObject {
 				headers: { 'Content-Type': 'application/json' }
 			});
 		} catch (error) {
+			console.error('[OCRSession] handleProcess error:', error);
 			return new Response(JSON.stringify({ error: 'Invalid request body' }), {
 				status: 400,
 				headers: { 'Content-Type': 'application/json' }
