@@ -18,10 +18,10 @@ const OCR_OPTIONS = {
 	num_gpu: 999,
 	main_gpu: 0,
 	num_thread: 8,
-	repeat_penalty: 1.5, // Strong penalty to stop repetition loops
-	repeat_last_n: 256, // Long lookback to catch repetitive patterns early
-	top_k: 10, // Focused token selection for deterministic OCR
-	top_p: 0.7 // Tighter sampling to avoid hallucinations
+	repeat_penalty: 1.8, // Stronger penalty to stop repetition loops
+	repeat_last_n: 512, // Longer lookback to catch repetitive patterns
+	top_k: 5, // Tighter token selection for deterministic OCR
+	top_p: 0.5 // Much tighter sampling to prevent hallucinations/commentary
 };
 
 interface Env {

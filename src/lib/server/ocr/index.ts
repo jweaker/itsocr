@@ -6,7 +6,7 @@ export const OCR_CONTEXT_SIZE = 16384;
 // Parallel processing configuration for PDFs
 export const PDF_PARALLEL_PAGES = 4; // Process 4 pages at a time on A5000
 
-// Ollama options optimized for OCR accuracy and preventing infinite loops
+// Ollama options optimized for OCR accuracy and preventing repetition/commentary
 export const OCR_OPTIONS = {
 	temperature: 0, // Deterministic output for accuracy
 	num_predict: 8192, // Hard cap - enough for most documents (~6k words)
@@ -14,10 +14,10 @@ export const OCR_OPTIONS = {
 	num_gpu: 999,
 	main_gpu: 0,
 	num_thread: 8,
-	repeat_penalty: 1.5, // Strong penalty to stop repetition loops
-	repeat_last_n: 256, // Long lookback to catch repetitive patterns early
-	top_k: 10, // Focused token selection for deterministic OCR
-	top_p: 0.7 // Tighter sampling to avoid hallucinations
+	repeat_penalty: 1.8, // Stronger penalty to stop repetition loops
+	repeat_last_n: 512, // Longer lookback to catch repetitive patterns
+	top_k: 5, // Tighter token selection for deterministic OCR
+	top_p: 0.5 // Much tighter sampling to prevent hallucinations/commentary
 };
 
 /**
@@ -26,8 +26,8 @@ export const OCR_OPTIONS = {
 export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
-	// Concise, direct prompt optimized for OCR without causing loops
-	const basePrompt = `Extract all visible text from this image exactly as it appears. Output only the text, preserve formatting and line breaks.`;
+	// Strict prompt to prevent model commentary and repetition
+	const basePrompt = `OCR task: Extract all visible text from this image verbatim. Rules: Output ONLY the extracted text. Do NOT add commentary, explanations, notes, or observations. Do NOT repeat content. Stop when all text is extracted.`;
 
 	if (!custom) {
 		return basePrompt;
