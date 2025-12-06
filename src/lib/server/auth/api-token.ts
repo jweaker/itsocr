@@ -144,6 +144,15 @@ export async function validateApiToken(authHeader: string | null): Promise<ApiAu
 }
 
 /**
+ * CORS headers for API responses
+ */
+const CORS_HEADERS = {
+	'Access-Control-Allow-Origin': '*',
+	'Access-Control-Allow-Methods': 'POST, OPTIONS',
+	'Access-Control-Allow-Headers': 'Authorization, Content-Type'
+};
+
+/**
  * Create a JSON error response for API endpoints
  */
 export function apiError(message: string, statusCode: number = 400): Response {
@@ -154,7 +163,10 @@ export function apiError(message: string, statusCode: number = 400): Response {
 		}),
 		{
 			status: statusCode,
-			headers: { 'Content-Type': 'application/json' }
+			headers: {
+				'Content-Type': 'application/json',
+				...CORS_HEADERS
+			}
 		}
 	);
 }
@@ -170,7 +182,10 @@ export function apiSuccess<T>(data: T, statusCode: number = 200): Response {
 		}),
 		{
 			status: statusCode,
-			headers: { 'Content-Type': 'application/json' }
+			headers: {
+				'Content-Type': 'application/json',
+				...CORS_HEADERS
+			}
 		}
 	);
 }

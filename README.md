@@ -1,6 +1,14 @@
 # ItsOCR
 
-AI-powered OCR service built on Cloudflare Workers. Upload images, extract text in real-time via streaming.
+AI-powered OCR service built on Cloudflare Workers. Upload images and PDFs, extract text in real-time via streaming or REST API.
+
+## Features
+
+- **Image OCR**: Extract text from images (JPEG, PNG, WebP, GIF)
+- **PDF Support**: Multi-page PDF processing with parallel extraction
+- **Real-time Streaming**: WebSocket-based streaming for instant feedback
+- **REST API**: Programmatic access with API tokens for automation
+- **Usage Tracking**: Per-plan limits with monthly quotas
 
 ## Stack
 
@@ -10,7 +18,7 @@ AI-powered OCR service built on Cloudflare Workers. Upload images, extract text 
 - **Storage**: Cloudflare R2
 - **Auth**: Better Auth (email/password + OAuth)
 - **OCR**: Ollama with Llama 3.2 Vision (self-hosted)
-- **API**: tRPC
+- **API**: tRPC + REST API
 
 ## Architecture
 
@@ -113,28 +121,114 @@ src/
 │   └── dashboard-sessions.ts # Real-time dashboard updates
 ├── lib/
 │   ├── server/
-│   │   ├── auth/             # Better Auth config
+│   │   ├── auth/             # Better Auth + API token validation
 │   │   ├── db/               # Drizzle schema
-│   │   ├── trpc/             # API routes
+│   │   ├── trpc/             # tRPC routes
+│   │   ├── ocr/              # OCR processing logic
 │   │   └── services/usage.ts # Usage tracking
 │   └── components/ui/        # shadcn-svelte
 ├── routes/
 │   ├── api/
+│   │   ├── v1/ocr/           # Public REST API
 │   │   ├── ocr/[id]/         # OCR endpoints
 │   │   ├── upload/           # R2 upload
 │   │   └── trpc/             # tRPC handler
 │   ├── dashboard/            # Main UI
+│   ├── settings/             # API token management
+│   ├── docs/api/             # API documentation
 │   └── image/[image]/        # Image detail view
 └── hooks.server.ts           # Auth middleware
 ```
 
+## REST API
+
+ItsOCR provides a REST API for programmatic access. Generate API tokens from the Settings page.
+
+### Authentication
+
+All API requests require a Bearer token:
+
+```bash
+curl -X POST https://your-domain.com/api/v1/ocr \
+  -H "Authorization: Bearer your_api_token" \
+  -F "file=@document.png"
+```
+
+### Endpoints
+
+#### POST /api/v1/ocr
+
+Extract text from an image or PDF.
+
+**Request:**
+
+- `file` (required): Image file (JPEG, PNG, WebP, GIF) or PDF
+- Max file size depends on your plan
+
+**Response:**
+
+```json
+{
+	"success": true,
+	"text": "Extracted text content...",
+	"pages": 1
+}
+```
+
+For PDFs, multiple pages are processed in parallel (4 at a time).
+
+**Error Response:**
+
+```json
+{
+	"success": false,
+	"error": "Error message"
+}
+```
+
+### Code Examples
+
+**JavaScript:**
+
+```javascript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('https://your-domain.com/api/v1/ocr', {
+	method: 'POST',
+	headers: {
+		Authorization: 'Bearer your_api_token'
+	},
+	body: formData
+});
+
+const result = await response.json();
+console.log(result.text);
+```
+
+**Python:**
+
+```python
+import requests
+
+with open('document.png', 'rb') as f:
+    response = requests.post(
+        'https://your-domain.com/api/v1/ocr',
+        headers={'Authorization': 'Bearer your_api_token'},
+        files={'file': f}
+    )
+
+result = response.json()
+print(result['text'])
+```
+
 ## Plans
 
-| Plan       | Images/Month | Max Size |
-| ---------- | ------------ | -------- |
-| Free       | 10           | 5MB      |
-| Pro        | 500          | 20MB     |
-| Enterprise | Unlimited    | 50MB     |
+| Plan       | Images/Month | Max Size | API Access |
+| ---------- | ------------ | -------- | ---------- |
+| Free       | 10           | 5MB      | Yes        |
+| Pro        | 500          | 20MB     | Yes        |
+| Enterprise | Unlimited    | 50MB     | Yes        |
 
 ## License
 

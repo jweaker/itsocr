@@ -12,7 +12,12 @@ const config = {
 			}
 			// Platform proxy disabled - it causes HMR full page reloads
 			// Use `pnpm preview` for full Cloudflare bindings
-		})
+		}),
+		csrf: {
+			// Allow external API requests - API routes use Bearer token auth which is CSRF-safe
+			// Browser-based form submissions still get session cookie protection via SameSite
+			checkOrigin: false
+		}
 	}
 };
 
