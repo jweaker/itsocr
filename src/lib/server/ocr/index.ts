@@ -1,18 +1,32 @@
-// Default OCR prompt for text extraction (hardcoded, not saved to DB)
-export const DEFAULT_OCR_PROMPT = `Extract all text from this image exactly as it appears. Preserve the original formatting and line breaks. Only output the text, nothing else.`;
-
 // Model configuration
 export const OCR_MODEL = 'minicpm-v';
 export const OCR_MAX_TOKENS = 4096;
 
 /**
- * Build the full prompt by combining default prompt with user's custom prompt
+ * Build the OCR prompt based on whether custom instructions are provided
  */
 export function buildPrompt(customPrompt?: string | null): string {
-	if (!customPrompt?.trim()) {
-		return DEFAULT_OCR_PROMPT;
+	const custom = customPrompt?.trim();
+
+	if (!custom) {
+		// Default OCR mode - strict text extraction only
+		return `OCR this image. Extract all visible text exactly as it appears.
+
+Rules:
+- Output only the raw text, nothing else
+- Preserve formatting and line breaks
+- No descriptions, explanations, or commentary
+- If no text found, output: [NO TEXT FOUND]`;
 	}
-	return `${DEFAULT_OCR_PROMPT}\n\nAdditional instructions: ${customPrompt.trim()}`;
+
+	// Custom prompt mode - user wants specific extraction/processing
+	return `OCR this image and follow these instructions: ${custom}
+
+Rules:
+- Focus on the text content in the image
+- Follow the user's instructions above
+- Be concise and direct in your response
+- No unnecessary preamble or explanations`;
 }
 
 /**

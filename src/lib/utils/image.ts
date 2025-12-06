@@ -4,13 +4,19 @@
 
 /**
  * Maximum dimension for image resizing before upload
+ * 1024px is optimal for OCR - fast processing while maintaining text readability
  */
-export const MAX_IMAGE_DIMENSION = 1920;
+export const MAX_IMAGE_DIMENSION = 1024;
 
 /**
  * Maximum file size for upload (50MB)
  */
 export const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+/**
+ * JPEG quality for resized images (higher = better text clarity for OCR)
+ */
+export const IMAGE_QUALITY = 0.9;
 
 /**
  * Allowed MIME types for upload
@@ -42,7 +48,7 @@ export function isAllowedMimeType(mimeType: string): mimeType is AllowedMimeType
 export async function resizeImage(
 	file: File,
 	maxDimension: number = MAX_IMAGE_DIMENSION,
-	quality: number = 0.85
+	quality: number = IMAGE_QUALITY
 ): Promise<{ blob: Blob; width: number; height: number }> {
 	return new Promise((resolve, reject) => {
 		const img = new Image();

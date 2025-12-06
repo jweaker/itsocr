@@ -183,16 +183,18 @@
 		if (!image) return;
 
 		try {
-			// Trigger processing via the process endpoint
-			const response = await fetch(`/api/ocr/${data.imageId}/process`, {
+			// Use the rescan endpoint to get a server-built prompt
+			// This ensures the prompt is always constructed server-side
+			const result = await trpc.images.rescan.mutate({
+				id: image.id,
+				customPrompt: image.customPrompt || undefined
+			});
+
+			// Trigger processing via the process endpoint with server-built payload
+			const response = await fetch(result.processUrl, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					imageId: image.id,
-					userId: image.userId,
-					imageKey: image.imageKey,
-					prompt: buildPrompt(image.customPrompt)
-				})
+				body: JSON.stringify(result.processPayload)
 			});
 
 			if (!response.ok) {
@@ -202,14 +204,6 @@
 		} catch (e) {
 			console.error('[Process] Error:', e);
 		}
-	}
-
-	function buildPrompt(customPrompt: string | null): string {
-		const basePrompt =
-			'Extract all text from this image exactly as it appears. Preserve the original formatting and line breaks. Only output the text, nothing else.';
-		return customPrompt
-			? `${basePrompt}\n\nAdditional instructions: ${customPrompt.trim()}`
-			: basePrompt;
 	}
 
 	function closeWebSocket() {

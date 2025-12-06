@@ -288,7 +288,7 @@ export class OCRSession implements DurableObject {
 			// Check image dimensions from custom metadata (stored during upload)
 			const originalWidth = parseInt(object.customMetadata?.width || '0', 10);
 			const originalHeight = parseInt(object.customMetadata?.height || '0', 10);
-			const MAX_DIMENSION = 1500;
+			const MAX_DIMENSION = 1024;
 
 			// If image is too large, resize it
 			if (originalWidth > MAX_DIMENSION || originalHeight > MAX_DIMENSION) {
@@ -356,7 +356,10 @@ export class OCRSession implements DurableObject {
 						stream: true,
 						options: {
 							temperature: 0,
-							num_predict: 4096
+							num_predict: 4096,
+							top_k: 1,
+							top_p: 0.1,
+							repeat_penalty: 1.2
 						}
 					}),
 					signal: this.abortController?.signal
