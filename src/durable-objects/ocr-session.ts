@@ -18,11 +18,11 @@ const OCR_OPTIONS = {
 	num_gpu: 999,
 	main_gpu: 0,
 	num_thread: 8,
-	repeat_penalty: 1.2, // Slight penalty to avoid repetition
-	repeat_last_n: 128, // Look back for repetition
-	top_k: 10, // More focused token selection
-	top_p: 0.5, // More deterministic sampling
-	mirostat: 0 // Disable mirostat for OCR
+	repeat_penalty: 1.1, // Light penalty to avoid repetition without stopping early
+	repeat_last_n: 64, // Shorter lookback to avoid false repetition detection
+	top_k: 40, // Wider token selection to avoid early stopping
+	top_p: 0.9, // Less restrictive sampling
+	stop: [] as string[] // No stop sequences - extract all text
 };
 
 interface Env {

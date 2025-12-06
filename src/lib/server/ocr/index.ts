@@ -6,7 +6,7 @@ export const OCR_CONTEXT_SIZE = 16384;
 // Parallel processing configuration for PDFs
 export const PDF_PARALLEL_PAGES = 4; // Process 4 pages at a time on A5000
 
-// Ollama options optimized for OCR accuracy
+// Ollama options optimized for OCR accuracy and completeness
 export const OCR_OPTIONS = {
 	temperature: 0, // Deterministic output for accuracy
 	num_predict: OCR_MAX_TOKENS,
@@ -14,11 +14,11 @@ export const OCR_OPTIONS = {
 	num_gpu: 999,
 	main_gpu: 0,
 	num_thread: 8,
-	repeat_penalty: 1.2, // Slight penalty to avoid repetition
-	repeat_last_n: 128, // Look back for repetition
-	top_k: 10, // More focused token selection
-	top_p: 0.5, // More deterministic sampling
-	mirostat: 0 // Disable mirostat for OCR
+	repeat_penalty: 1.1, // Light penalty to avoid repetition without stopping early
+	repeat_last_n: 64, // Shorter lookback to avoid false repetition detection
+	top_k: 40, // Wider token selection to avoid early stopping
+	top_p: 0.9, // Less restrictive sampling
+	stop: [] // No stop sequences - extract all text
 };
 
 /**
@@ -28,22 +28,8 @@ export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
 	if (!custom) {
-		// Precise OCR prompt optimized for accuracy
-		return `OCR Task: Extract all text from this image with high accuracy.
-
-Guidelines:
-- Read every word exactly as written, including punctuation and special characters
-- Maintain the reading order: top to bottom, left to right
-- Preserve paragraph breaks and list formatting
-- Include all text: titles, body text, footnotes, headers, labels, watermarks
-- For tables, read row by row
-- If a character is ambiguous, use context to determine the most likely letter
-- Numbers and dates must be transcribed exactly
-- Do not skip any text, even if partially visible
-- Do not interpret or summarize - transcribe verbatim
-- Output only the extracted text with no commentary
-
-Text from image:`;
+		// Simple, direct prompt that encourages complete extraction
+		return `Extract all text from this image exactly as written. Include every word, number, and symbol. Preserve paragraphs and formatting. Do not stop until all visible text has been extracted.`;
 	}
 
 	// Custom prompt mode
