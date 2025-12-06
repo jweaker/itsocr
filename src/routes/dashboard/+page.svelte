@@ -17,6 +17,9 @@
 		resizeImage,
 		getImageFromClipboard,
 		isAllowedMimeType,
+		isAllowedImageMimeType,
+		isPdfMimeType,
+		extractPdfPages,
 		MAX_FILE_SIZE,
 		formatFileSize
 	} from '$lib/utils/image';
@@ -345,7 +348,8 @@
 	async function processUploadFile(file: File) {
 		// Validate file type
 		if (!isAllowedMimeType(file.type)) {
-			uploadError = 'Invalid file type. Please upload an image (JPG, PNG, WebP, HEIC, etc.)';
+			uploadError =
+				'Invalid file type. Please upload an image (JPG, PNG, WebP, HEIC, etc.) or PDF.';
 			return;
 		}
 
@@ -358,20 +362,35 @@
 		uploadError = null;
 
 		try {
-			// Resize image if needed
-			const { blob, width, height } = await resizeImage(file);
+			if (isPdfMimeType(file.type)) {
+				// For PDFs, store the original file for upload
+				// Page extraction happens during handleUpload
+				uploadFile = file;
+				// Create a preview using the first page
+				const { pages } = await extractPdfPages(file);
+				if (pages.length > 0) {
+					uploadPreview = URL.createObjectURL(pages[0].blob);
+					// Store page count for display
+					(uploadFile as any)._pageCount = pages.length;
+					(uploadFile as any)._width = pages[0].width;
+					(uploadFile as any)._height = pages[0].height;
+				}
+			} else {
+				// Resize image if needed
+				const { blob, width, height } = await resizeImage(file);
 
-			// Create a new File from the resized blob
-			const resizedFile = new File([blob], file.name, { type: blob.type });
+				// Create a new File from the resized blob
+				const resizedFile = new File([blob], file.name, { type: blob.type });
 
-			uploadFile = resizedFile;
-			uploadPreview = URL.createObjectURL(resizedFile);
+				uploadFile = resizedFile;
+				uploadPreview = URL.createObjectURL(resizedFile);
 
-			// Store dimensions for later use
-			(uploadFile as any)._width = width;
-			(uploadFile as any)._height = height;
+				// Store dimensions for later use
+				(uploadFile as any)._width = width;
+				(uploadFile as any)._height = height;
+			}
 		} catch (e) {
-			console.error('Failed to process image:', e);
+			console.error('Failed to process file:', e);
 			// Fall back to original file
 			uploadFile = file;
 			uploadPreview = URL.createObjectURL(file);
@@ -389,7 +408,7 @@
 	function handleDrop(event: DragEvent) {
 		event.preventDefault();
 		const file = event.dataTransfer?.files?.[0];
-		if (file && file.type.startsWith('image/')) {
+		if (file && (file.type.startsWith('image/') || isPdfMimeType(file.type))) {
 			processUploadFile(file);
 		}
 	}
@@ -405,14 +424,16 @@
 		uploadError = null;
 
 		try {
-			// 1. Get upload URL
+			const isPdf = isPdfMimeType(uploadFile.type);
+
+			// 1. Get upload URL for the original file
 			const { imageId, imageKey, uploadUrl } = await trpc.images.getUploadUrl.mutate({
 				fileName: uploadFile.name,
 				mimeType: uploadFile.type as any,
 				fileSizeBytes: uploadFile.size
 			});
 
-			// 2. Upload to R2
+			// 2. Upload original file to R2
 			const uploadResponse = await fetch(uploadUrl, {
 				method: 'PUT',
 				body: uploadFile,
@@ -422,10 +443,42 @@
 			});
 
 			if (!uploadResponse.ok) {
-				throw new Error('Failed to upload image');
+				throw new Error('Failed to upload file');
 			}
 
-			// 3. Create image record and queue OCR
+			// 3. For PDFs, extract and upload page images
+			let pageCount = 1;
+			let pageImages: string[] | undefined;
+
+			if (isPdf) {
+				const { pages } = await extractPdfPages(uploadFile);
+				pageCount = pages.length;
+				pageImages = [];
+
+				// Upload each page image
+				for (const page of pages) {
+					const pageFileName = `${uploadFile.name}_page${page.pageNumber}.jpg`;
+					const pageKey = `${imageKey.replace(/\.[^/.]+$/, '')}_page${page.pageNumber}.jpg`;
+
+					// Upload page image directly to the same user folder
+					const pageUploadUrl = `/api/upload/${pageKey}`;
+					const pageUploadResponse = await fetch(pageUploadUrl, {
+						method: 'PUT',
+						body: page.blob,
+						headers: {
+							'Content-Type': 'image/jpeg'
+						}
+					});
+
+					if (!pageUploadResponse.ok) {
+						throw new Error(`Failed to upload page ${page.pageNumber}`);
+					}
+
+					pageImages.push(pageKey);
+				}
+			}
+
+			// 4. Create image record and queue OCR
 			const width = (uploadFile as any)._width;
 			const height = (uploadFile as any)._height;
 
@@ -437,10 +490,12 @@
 				fileSizeBytes: uploadFile.size,
 				width: width ? Math.round(width) : undefined,
 				height: height ? Math.round(height) : undefined,
+				pageCount: isPdf ? pageCount : undefined,
+				pageImages: isPdf ? pageImages : undefined,
 				customPrompt: customPrompt || undefined
 			});
 
-			// 4. Close modal and navigate to image page
+			// 5. Close modal and navigate to image page
 			closeUploadModal();
 			goto(`/image/${imageId}`);
 		} catch (e) {
@@ -1290,7 +1345,7 @@
 				<input
 					id="file-upload"
 					type="file"
-					accept="image/*"
+					accept="image/*,.pdf,application/pdf"
 					class="hidden"
 					onchange={handleFileSelect}
 					disabled={isUploading}
@@ -1320,6 +1375,13 @@
 								/>
 							</svg>
 							{uploadFile?.name}
+							{#if uploadFile && isPdfMimeType(uploadFile.type)}
+								<span class="text-muted-foreground"
+									>({(uploadFile as any)._pageCount || 1} page{(uploadFile as any)._pageCount !== 1
+										? 's'
+										: ''})</span
+								>
+							{/if}
 						</div>
 					</div>
 				{:else}
@@ -1339,7 +1401,7 @@
 						</svg>
 					</div>
 					<p class="text-sm font-medium">Click or drag to upload</p>
-					<p class="mt-1 text-xs text-muted-foreground">JPG, PNG, WebP, HEIC up to 50MB</p>
+					<p class="mt-1 text-xs text-muted-foreground">JPG, PNG, WebP, HEIC, PDF up to 50MB</p>
 				{/if}
 			</div>
 

@@ -64,6 +64,9 @@ export const verification = sqliteTable('verification', {
 // Scanned Images
 // =============================================================================
 
+// Page delimiter for multi-page PDFs - used to split extracted text by page
+export const PAGE_DELIMITER = '\n\n---PAGE_BREAK---\n\n';
+
 export const scannedImage = sqliteTable(
 	'scanned_image',
 	{
@@ -72,15 +75,19 @@ export const scannedImage = sqliteTable(
 			.notNull()
 			.references(() => user.id, { onDelete: 'cascade' }),
 		fileName: text('file_name').notNull(),
-		imageKey: text('image_key').notNull(), // R2 object key
-		originalUrl: text('original_url').notNull(), // URL to access the image
+		imageKey: text('image_key').notNull(), // R2 object key (for PDFs, this is the original PDF)
+		originalUrl: text('original_url').notNull(), // URL to access the image/PDF
 		thumbnailUrl: text('thumbnail_url'),
 		mimeType: text('mime_type').notNull(),
 		fileSizeBytes: integer('file_size_bytes').notNull(),
 		width: integer('width'),
 		height: integer('height'),
+		// PDF-specific fields
+		isPdf: integer('is_pdf', { mode: 'boolean' }).notNull().default(false),
+		pageCount: integer('page_count'), // Number of pages (1 for images, N for PDFs)
+		pageImages: text('page_images', { mode: 'json' }).$type<string[]>(), // R2 keys for page images
 		customPrompt: text('custom_prompt'), // User's custom addition to the default prompt
-		extractedText: text('extracted_text'),
+		extractedText: text('extracted_text'), // For PDFs: pages separated by PAGE_DELIMITER
 		confidence: real('confidence'),
 		language: text('language'),
 		processingTimeMs: integer('processing_time_ms'),

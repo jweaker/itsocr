@@ -1,5 +1,5 @@
 // Model configuration
-export const OCR_MODEL = 'minicpm-v';
+export const OCR_MODEL = 'qwen3-vl';
 export const OCR_MAX_TOKENS = 4096;
 
 /**
@@ -9,30 +9,12 @@ export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
 	if (!custom) {
-		// Default OCR mode - strict text extraction only
-		return `Extract all text from this image exactly as shown.
-
-CRITICAL RULES:
-- Output ONLY the exact text visible in the image
-- Do NOT add punctuation that isn't in the original
-- Do NOT add a period/dot at the end unless it's in the image
-- Preserve exact formatting, spacing, and line breaks
-- No descriptions or commentary
-- If no text: [NO TEXT FOUND]`;
+		// Default OCR mode - preserve formatting, no extra lines
+		return `OCR this image. Preserve the original formatting. Do not add extra blank lines.`;
 	}
 
-	// Custom prompt mode - user's instruction is the PRIMARY task
-	return `TASK: ${custom}
-
-Read the text in this image and complete the task above.
-
-CRITICAL RULES:
-- Your PRIMARY job is to follow the TASK instruction above
-- Do NOT output the full text unless the task asks for it
-- Do NOT add punctuation that isn't in the original
-- Do NOT add a period/dot at the end unless it's in the image
-- Be direct - no preamble like "The answer is:" or "Here is:"
-- Output only what the task asks for`;
+	// Custom prompt mode
+	return custom;
 }
 
 /**

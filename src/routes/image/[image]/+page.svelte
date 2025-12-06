@@ -33,6 +33,9 @@
 		fileSizeBytes: number;
 		width: number | null;
 		height: number | null;
+		isPdf: boolean;
+		pageCount: number | null;
+		pageImages: string[] | null;
 		status: string;
 		extractedText: string | null;
 		customPrompt: string | null;
@@ -43,6 +46,31 @@
 		createdAt: string;
 		updatedAt: string;
 	} | null>(null);
+
+	// Page delimiter constant - must match schema.ts
+	const PAGE_DELIMITER = '\n\n---PAGE_BREAK---\n\n';
+
+	// Derived state for PDF pages
+	let pages = $derived.by(() => {
+		if (!image) return [];
+		if (!image.isPdf || !image.pageImages || image.pageImages.length === 0) {
+			// Single image - treat as single page
+			return [
+				{
+					pageNumber: 1,
+					imageUrl: image.originalUrl,
+					text: image.extractedText || ''
+				}
+			];
+		}
+		// Multi-page PDF - split text by delimiter
+		const texts = image.extractedText?.split(PAGE_DELIMITER) || [];
+		return image.pageImages.map((pageKey, index) => ({
+			pageNumber: index + 1,
+			imageUrl: `/api/images/${pageKey}`,
+			text: texts[index] || ''
+		}));
+	});
 
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
@@ -338,10 +366,10 @@
 				customPrompt: rescanPrompt.trim() || undefined
 			});
 
-			// Reset local state
+			// Reset local state - set to 'processing' to prevent double trigger
 			image = {
 				...image,
-				status: 'pending',
+				status: 'processing',
 				extractedText: null,
 				errorMessage: null,
 				processingTimeMs: null,
@@ -565,179 +593,100 @@
 					<Button onclick={loadImage} variant="outline" size="sm">Try again</Button>
 				</div>
 			{:else if image}
-				<!-- Mobile: Stack vertically, Desktop: Side by side -->
-				<div class="flex flex-col gap-4 lg:flex-row lg:gap-6">
-					<!-- Left Column: Image + Details -->
-					<div class="w-full space-y-4 lg:w-80 lg:flex-shrink-0">
-						<!-- Image Preview Card -->
-						<Card.Root class="overflow-hidden shadow-sm">
-							<div class="relative">
-								<img
-									src={image.originalUrl}
-									alt={image.fileName}
-									class="aspect-auto w-full object-contain p-3 sm:p-4"
-									style="max-height: 280px;"
-								/>
-							</div>
-						</Card.Root>
-
-						<!-- Metadata Card - Collapsible on mobile -->
-						<Card.Root class="shadow-sm">
-							<Card.Header class="pb-2 pt-3 sm:pb-3 sm:pt-4">
-								<Card.Title
-									class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-								>
-									<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-									Details
-								</Card.Title>
-							</Card.Header>
-							<Card.Content class="space-y-2.5 pb-3 text-sm sm:pb-4">
-								<div class="flex items-center justify-between py-0.5">
-									<span class="text-muted-foreground">Status</span>
-									<span
-										class="flex items-center gap-1.5 font-medium {getStatusColor(image.status)}"
+				{#if image.isPdf && pages.length > 1}
+					<!-- Multi-page PDF Layout: Metadata at top, then vertical pages -->
+					<div class="space-y-4 sm:space-y-6">
+						<!-- Top Row: Metadata + Actions -->
+						<div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+							<!-- Metadata Card -->
+							<Card.Root class="shadow-sm lg:w-80 lg:flex-shrink-0">
+								<Card.Header class="pb-2 pt-3 sm:pb-3 sm:pt-4">
+									<Card.Title
+										class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
 									>
-										{#if image.status === 'processing'}
-											<div class="h-2 w-2 animate-pulse rounded-full bg-yellow-500"></div>
-										{:else if image.status === 'completed'}
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+											/>
+										</svg>
+										Document Details
+									</Card.Title>
+								</Card.Header>
+								<Card.Content class="space-y-2.5 pb-3 text-sm sm:pb-4">
+									<div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-2">
+										<div class="flex flex-col gap-0.5">
+											<span class="text-xs text-muted-foreground">Status</span>
+											<span
+												class="flex items-center gap-1.5 text-xs font-medium {getStatusColor(
+													image.status
+												)}"
 											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M5 13l4 4L19 7"
-												/>
-											</svg>
-										{:else if image.status === 'failed'}
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M6 18L18 6M6 6l12 12"
-												/>
-											</svg>
-										{:else if image.status === 'cancelled'}
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-												/>
-											</svg>
+												{#if image.status === 'processing'}
+													<div class="h-2 w-2 animate-pulse rounded-full bg-yellow-500"></div>
+												{/if}
+												{image.status.charAt(0).toUpperCase() + image.status.slice(1)}
+											</span>
+										</div>
+										<div class="flex flex-col gap-0.5">
+											<span class="text-xs text-muted-foreground">Pages</span>
+											<span class="text-xs font-medium">{image.pageCount || pages.length}</span>
+										</div>
+										<div class="flex flex-col gap-0.5">
+											<span class="text-xs text-muted-foreground">Size</span>
+											<span class="text-xs font-medium">{formatFileSize(image.fileSizeBytes)}</span>
+										</div>
+										<div class="flex flex-col gap-0.5">
+											<span class="text-xs text-muted-foreground">Created</span>
+											<span class="text-xs font-medium">{formatDate(image.createdAt)}</span>
+										</div>
+										{#if image.processingTimeMs}
+											<div class="flex flex-col gap-0.5">
+												<span class="text-xs text-muted-foreground">Process Time</span>
+												<span class="text-xs font-medium"
+													>{(image.processingTimeMs / 1000).toFixed(2)}s</span
+												>
+											</div>
 										{/if}
-										{image.status.charAt(0).toUpperCase() + image.status.slice(1)}
-									</span>
-								</div>
-								<Separator class="my-2" />
-								<div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-1 sm:gap-y-2.5">
-									<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-										<span class="text-xs text-muted-foreground sm:text-sm">Created</span>
-										<span class="text-xs font-medium sm:text-sm">{formatDate(image.createdAt)}</span
-										>
 									</div>
-									<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-										<span class="text-xs text-muted-foreground sm:text-sm">Size</span>
-										<span class="text-xs font-medium sm:text-sm"
-											>{formatFileSize(image.fileSizeBytes)}</span
-										>
-									</div>
-									<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-										<span class="text-xs text-muted-foreground sm:text-sm">Type</span>
-										<span class="text-xs font-medium sm:text-sm"
-											>{image.mimeType.split('/')[1].toUpperCase()}</span
-										>
-									</div>
-									{#if image.width && image.height}
-										<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-											<span class="text-xs text-muted-foreground sm:text-sm">Dimensions</span>
-											<span class="text-xs font-medium sm:text-sm"
-												>{image.width} x {image.height}</span
-											>
-										</div>
-									{/if}
-									{#if image.processingTimeMs}
-										<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-											<span class="text-xs text-muted-foreground sm:text-sm">Process Time</span>
-											<span class="text-xs font-medium sm:text-sm"
-												>{(image.processingTimeMs / 1000).toFixed(2)}s</span
-											>
-										</div>
-									{/if}
-									{#if image.confidence}
-										<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-											<span class="text-xs text-muted-foreground sm:text-sm">Confidence</span>
-											<span class="text-xs font-medium sm:text-sm"
-												>{(image.confidence * 100).toFixed(0)}%</span
-											>
-										</div>
-									{/if}
-									{#if image.language}
-										<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
-											<span class="text-xs text-muted-foreground sm:text-sm">Language</span>
-											<span class="text-xs font-medium sm:text-sm">{image.language}</span>
-										</div>
-									{/if}
-								</div>
-							</Card.Content>
-						</Card.Root>
-					</div>
+								</Card.Content>
+							</Card.Root>
 
-					<!-- Right Column: Result Viewer -->
-					<div class="min-w-0 flex-1">
-						<Card.Root class="flex h-full flex-col shadow-sm p-0">
-							<!-- Compact header with copy button -->
-							<div class="flex items-center justify-between border-b px-3 py-1.5 sm:px-4 sm:py-2">
-								<div class="flex items-center gap-1.5">
-									<svg
-										class="h-3 w-3 text-primary sm:h-3.5 sm:w-3.5"
-										fill="none"
-										viewBox="0 0 24 24"
-										stroke="currentColor"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-										/>
-									</svg>
-									<span class="text-xs font-medium sm:text-sm">Extracted Text</span>
-								</div>
-								{#if image.extractedText && image.status === 'completed'}
-									<div class="flex items-center gap-0.5 sm:gap-1">
+							<!-- Export buttons for completed PDFs -->
+							{#if image.extractedText && image.status === 'completed'}
+								<Card.Root class="flex-1 shadow-sm">
+									<Card.Header class="pb-2 pt-3 sm:pb-3 sm:pt-4">
+										<Card.Title
+											class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+										>
+											<svg
+												class="h-3.5 w-3.5"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+												/>
+											</svg>
+											Export All Text
+										</Card.Title>
+									</Card.Header>
+									<Card.Content class="flex flex-wrap gap-2 pb-3 sm:pb-4">
 										<Button
-											variant="ghost"
+											variant="outline"
 											size="sm"
 											onclick={copyToClipboard}
-											class="h-6 gap-1 px-1.5 text-[10px] sm:h-7 sm:gap-1.5 sm:px-2 sm:text-xs"
+											class="h-8 gap-1.5 text-xs"
 										>
 											{#if copied}
 												<svg
-													class="h-3 w-3 text-green-500"
+													class="h-3.5 w-3.5 text-green-500"
 													fill="none"
 													viewBox="0 0 24 24"
 													stroke="currentColor"
@@ -749,63 +698,10 @@
 														d="M5 13l4 4L19 7"
 													/>
 												</svg>
-												<span class="font-medium text-green-600">Copied!</span>
+												Copied!
 											{:else}
-												<svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-													/>
-												</svg>
-												<span class="font-medium">Copy</span>
-											{/if}
-										</Button>
-										<div class="h-4 w-px bg-border"></div>
-										<Button
-											variant="ghost"
-											size="sm"
-											onclick={downloadAsTxt}
-											class="h-6 px-1.5 text-[10px] sm:h-7 sm:px-2 sm:text-xs"
-											title="Download as TXT"
-										>
-											<span class="font-medium">.txt</span>
-										</Button>
-										<Button
-											variant="ghost"
-											size="sm"
-											onclick={downloadAsDocx}
-											class="h-6 px-1.5 text-[10px] sm:h-7 sm:px-2 sm:text-xs"
-											title="Download as DOC"
-										>
-											<span class="font-medium">.doc</span>
-										</Button>
-										<Button
-											variant="ghost"
-											size="sm"
-											onclick={downloadAsPdf}
-											class="h-6 px-1.5 text-[10px] sm:h-7 sm:px-2 sm:text-xs"
-											title="Download as PDF"
-										>
-											<span class="font-medium">.pdf</span>
-										</Button>
-									</div>
-								{/if}
-							</div>
-
-							<div class="flex-1 p-3 sm:p-4">
-								{#if image.status === 'pending'}
-									<div
-										class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 sm:min-h-[280px]"
-									>
-										<div class="relative">
-											<div
-												class="h-10 w-10 animate-spin rounded-full border-3 border-primary/20 border-t-primary sm:h-12 sm:w-12"
-											></div>
-											<div class="absolute inset-0 flex items-center justify-center">
 												<svg
-													class="h-3.5 w-3.5 animate-pulse text-primary sm:h-4 sm:w-4"
+													class="h-3.5 w-3.5"
 													fill="none"
 													viewBox="0 0 24 24"
 													stroke="currentColor"
@@ -814,237 +710,240 @@
 														stroke-linecap="round"
 														stroke-linejoin="round"
 														stroke-width="2"
-														d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+														d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
 													/>
 												</svg>
-											</div>
-										</div>
-										<p class="animate-pulse text-xs text-muted-foreground sm:text-sm">
-											Waiting to process...
-										</p>
-									</div>
-								{:else if image.status === 'processing'}
-									<div class="flex h-full min-h-[200px] flex-col sm:min-h-[280px]">
-										{#if image.extractedText}
-											<!-- Show text streaming in real-time -->
-											<div class="mb-2 flex items-center justify-between gap-2 sm:mb-3">
-												<div class="flex items-center gap-2">
-													<div class="h-2 w-2 animate-pulse rounded-full bg-yellow-500"></div>
-													<span class="text-xs font-medium text-yellow-600 dark:text-yellow-400">
-														Extracting text...
-													</span>
-												</div>
-												<Button
-													variant="destructive"
-													size="sm"
-													onclick={handleCancel}
-													disabled={isCancelling}
-													class="h-7 gap-1 px-2 text-xs sm:h-8 sm:gap-1.5 sm:px-2.5"
-												>
-													{#if isCancelling}
-														<div
-															class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent sm:h-3.5 sm:w-3.5"
-														></div>
-													{:else}
-														<svg
-															class="h-3 w-3 sm:h-3.5 sm:w-3.5"
-															fill="none"
-															viewBox="0 0 24 24"
-															stroke="currentColor"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M6 18L18 6M6 6l12 12"
-															/>
-														</svg>
-													{/if}
-													Cancel
-												</Button>
-											</div>
-											<div
-												class="prose prose-sm dark:prose-invert max-w-none p-0 flex-1 whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-sm"
-											>
-												{image.extractedText}<span class="animate-pulse text-primary">|</span>
-											</div>
-										{:else}
-											<!-- No text yet, show loading spinner with cancel button -->
-											<div class="flex flex-1 flex-col items-center justify-center gap-3 sm:gap-4">
-												<div class="relative">
-													<div
-														class="h-10 w-10 animate-spin rounded-full border-3 border-primary/20 border-t-primary sm:h-12 sm:w-12"
-													></div>
-													<div class="absolute inset-0 flex items-center justify-center">
-														<svg
-															class="h-3.5 w-3.5 animate-pulse text-primary sm:h-4 sm:w-4"
-															fill="none"
-															viewBox="0 0 24 24"
-															stroke="currentColor"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-															/>
-														</svg>
-													</div>
-												</div>
-												<p class="animate-pulse text-xs text-muted-foreground sm:text-sm">
-													Analyzing document...
-												</p>
-												<Button
-													variant="destructive"
-													size="sm"
-													onclick={handleCancel}
-													disabled={isCancelling}
-													class="mt-1 h-8 gap-1.5 text-xs sm:mt-2 sm:h-9 sm:text-sm"
-												>
-													{#if isCancelling}
-														<div
-															class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
-														></div>
-													{:else}
-														<svg
-															class="h-3.5 w-3.5"
-															fill="none"
-															viewBox="0 0 24 24"
-															stroke="currentColor"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M6 18L18 6M6 6l12 12"
-															/>
-														</svg>
-													{/if}
-													Cancel Processing
-												</Button>
-											</div>
-										{/if}
-									</div>
-								{:else if image.status === 'failed'}
-									<div
-										class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 sm:min-h-[280px] sm:gap-4"
-									>
-										<div class="rounded-full bg-destructive/10 p-3 sm:p-4">
-											<svg
-												class="h-6 w-6 text-destructive sm:h-8 sm:w-8"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-												/>
-											</svg>
-										</div>
-										<div class="text-center">
-											<p class="text-sm font-medium text-destructive sm:text-base">
-												Processing Failed
-											</p>
-											{#if image.errorMessage}
-												<p class="mt-1 max-w-sm px-4 text-xs text-muted-foreground sm:text-sm">
-													{image.errorMessage}
-												</p>
+												Copy All
 											{/if}
-										</div>
-										<Button
-											variant="outline"
-											size="sm"
-											onclick={openRescanDialog}
-											class="h-8 gap-1.5 text-xs sm:h-9 sm:text-sm"
-										>
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-												/>
-											</svg>
-											Try Again
 										</Button>
+										<Button variant="outline" size="sm" onclick={downloadAsTxt} class="h-8 text-xs"
+											>.txt</Button
+										>
+										<Button variant="outline" size="sm" onclick={downloadAsDocx} class="h-8 text-xs"
+											>.doc</Button
+										>
+										<Button variant="outline" size="sm" onclick={downloadAsPdf} class="h-8 text-xs"
+											>.pdf</Button
+										>
+									</Card.Content>
+								</Card.Root>
+							{/if}
+						</div>
+
+						<!-- Pages List -->
+						<div class="space-y-4">
+							{#each pages as page (page.pageNumber)}
+								<Card.Root class="overflow-hidden shadow-sm">
+									<div class="flex items-center justify-between border-b px-3 py-2 sm:px-4">
+										<span class="text-xs font-medium text-muted-foreground">
+											Page {page.pageNumber} of {pages.length}
+										</span>
 									</div>
-								{:else if image.status === 'cancelled'}
-									<div
-										class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 sm:min-h-[280px] sm:gap-4"
-									>
-										<div class="rounded-full bg-orange-500/10 p-3 sm:p-4">
-											<svg
-												class="h-6 w-6 text-orange-500 sm:h-8 sm:w-8"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-												/>
-											</svg>
-										</div>
-										<div class="text-center">
-											<p class="text-sm font-medium text-orange-500 sm:text-base">
-												Processing Cancelled
-											</p>
-											<p class="mt-1 px-4 text-xs text-muted-foreground sm:text-sm">
-												{#if image.extractedText}
-													Partial text was extracted before cancellation.
-												{:else}
-													No text was extracted before cancellation.
-												{/if}
-											</p>
-										</div>
-										<Button
-											variant="outline"
-											size="sm"
-											onclick={openRescanDialog}
-											class="h-8 gap-1.5 text-xs sm:h-9 sm:text-sm"
+									<div class="flex flex-col lg:flex-row">
+										<!-- Page Image -->
+										<div
+											class="flex-shrink-0 border-b p-3 sm:p-4 lg:w-80 lg:border-b-0 lg:border-r"
 										>
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-												/>
-											</svg>
-											Rescan
-										</Button>
-										{#if image.extractedText}
-											<div class="mt-3 w-full border-t pt-3 sm:mt-4 sm:pt-4">
-												<p class="mb-2 text-xs font-medium text-muted-foreground">Partial Text:</p>
+											<img
+												src={page.imageUrl}
+												alt="Page {page.pageNumber}"
+												class="w-full object-contain"
+												style="max-height: 400px;"
+												loading="lazy"
+											/>
+										</div>
+										<!-- Page Text -->
+										<div class="flex-1 p-3 sm:p-4">
+											{#if page.text}
 												<div
 													class="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-sm"
 												>
-													{image.extractedText}
+													{page.text}
 												</div>
+											{:else if image.status === 'processing'}
+												<div class="flex items-center gap-2 text-xs text-muted-foreground">
+													<div
+														class="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent"
+													></div>
+													Processing...
+												</div>
+											{:else if image.status === 'pending'}
+												<div class="text-xs italic text-muted-foreground">Pending...</div>
+											{:else}
+												<div class="text-xs italic text-muted-foreground">No text extracted</div>
+											{/if}
+										</div>
+									</div>
+								</Card.Root>
+							{/each}
+						</div>
+
+						{#if image.customPrompt}
+							<div class="rounded-lg border bg-muted/30 px-3 py-2 sm:px-4 sm:py-3">
+								<p class="text-[10px] text-muted-foreground sm:text-xs">
+									<span class="font-medium">Custom prompt:</span>
+									<span class="italic">{image.customPrompt}</span>
+								</p>
+							</div>
+						{/if}
+					</div>
+				{:else}
+					<!-- Single Image Layout (original) -->
+					<div class="flex flex-col gap-4 lg:flex-row lg:gap-6">
+						<!-- Left Column: Image + Details -->
+						<div class="w-full space-y-4 lg:w-80 lg:flex-shrink-0">
+							<!-- Image Preview Card -->
+							<Card.Root class="overflow-hidden shadow-sm">
+								<div class="relative">
+									<img
+										src={image.originalUrl}
+										alt={image.fileName}
+										class="aspect-auto w-full object-contain p-3 sm:p-4"
+										style="max-height: 280px;"
+									/>
+								</div>
+							</Card.Root>
+
+							<!-- Metadata Card - Collapsible on mobile -->
+							<Card.Root class="shadow-sm">
+								<Card.Header class="pb-2 pt-3 sm:pb-3 sm:pt-4">
+									<Card.Title
+										class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground"
+									>
+										<svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+											/>
+										</svg>
+										Details
+									</Card.Title>
+								</Card.Header>
+								<Card.Content class="space-y-2.5 pb-3 text-sm sm:pb-4">
+									<div class="flex items-center justify-between py-0.5">
+										<span class="text-muted-foreground">Status</span>
+										<span
+											class="flex items-center gap-1.5 font-medium {getStatusColor(image.status)}"
+										>
+											{#if image.status === 'processing'}
+												<div class="h-2 w-2 animate-pulse rounded-full bg-yellow-500"></div>
+											{:else if image.status === 'completed'}
+												<svg
+													class="h-3.5 w-3.5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M5 13l4 4L19 7"
+													/>
+												</svg>
+											{:else if image.status === 'failed'}
+												<svg
+													class="h-3.5 w-3.5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M6 18L18 6M6 6l12 12"
+													/>
+												</svg>
+											{:else if image.status === 'cancelled'}
+												<svg
+													class="h-3.5 w-3.5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+													/>
+												</svg>
+											{/if}
+											{image.status.charAt(0).toUpperCase() + image.status.slice(1)}
+										</span>
+									</div>
+									<Separator class="my-2" />
+									<div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-1 sm:gap-y-2.5">
+										<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+											<span class="text-xs text-muted-foreground sm:text-sm">Created</span>
+											<span class="text-xs font-medium sm:text-sm"
+												>{formatDate(image.createdAt)}</span
+											>
+										</div>
+										<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+											<span class="text-xs text-muted-foreground sm:text-sm">Size</span>
+											<span class="text-xs font-medium sm:text-sm"
+												>{formatFileSize(image.fileSizeBytes)}</span
+											>
+										</div>
+										<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+											<span class="text-xs text-muted-foreground sm:text-sm">Type</span>
+											<span class="text-xs font-medium sm:text-sm"
+												>{image.isPdf ? 'PDF' : image.mimeType.split('/')[1].toUpperCase()}</span
+											>
+										</div>
+										{#if image.isPdf && image.pageCount && image.pageCount > 1}
+											<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+												<span class="text-xs text-muted-foreground sm:text-sm">Pages</span>
+												<span class="text-xs font-medium sm:text-sm">{image.pageCount}</span>
+											</div>
+										{/if}
+										{#if image.width && image.height}
+											<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+												<span class="text-xs text-muted-foreground sm:text-sm">Dimensions</span>
+												<span class="text-xs font-medium sm:text-sm"
+													>{image.width} x {image.height}</span
+												>
+											</div>
+										{/if}
+										{#if image.processingTimeMs}
+											<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+												<span class="text-xs text-muted-foreground sm:text-sm">Process Time</span>
+												<span class="text-xs font-medium sm:text-sm"
+													>{(image.processingTimeMs / 1000).toFixed(2)}s</span
+												>
+											</div>
+										{/if}
+										{#if image.confidence}
+											<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+												<span class="text-xs text-muted-foreground sm:text-sm">Confidence</span>
+												<span class="text-xs font-medium sm:text-sm"
+													>{(image.confidence * 100).toFixed(0)}%</span
+												>
+											</div>
+										{/if}
+										{#if image.language}
+											<div class="flex flex-col gap-0.5 sm:flex-row sm:justify-between">
+												<span class="text-xs text-muted-foreground sm:text-sm">Language</span>
+												<span class="text-xs font-medium sm:text-sm">{image.language}</span>
 											</div>
 										{/if}
 									</div>
-								{:else if !image.extractedText}
-									<div
-										class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 text-muted-foreground/50 sm:min-h-[280px]"
-									>
+								</Card.Content>
+							</Card.Root>
+						</div>
+
+						<!-- Right Column: Result Viewer -->
+						<div class="min-w-0 flex-1">
+							<Card.Root class="flex h-full flex-col shadow-sm p-0">
+								<!-- Compact header with copy button -->
+								<div class="flex items-center justify-between border-b px-3 py-1.5 sm:px-4 sm:py-2">
+									<div class="flex items-center gap-1.5">
 										<svg
-											class="h-10 w-10 opacity-20 sm:h-12 sm:w-12"
+											class="h-3 w-3 text-primary sm:h-3.5 sm:w-3.5"
 											fill="none"
 											viewBox="0 0 24 24"
 											stroke="currentColor"
@@ -1056,29 +955,370 @@
 												d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 											/>
 										</svg>
-										<p class="text-xs sm:text-sm">No text was extracted from this image.</p>
+										<span class="text-xs font-medium sm:text-sm">Extracted Text</span>
 									</div>
-								{:else}
-									<!-- Completed state with extracted text -->
-									<div
-										class="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-sm"
-									>
-										{image.extractedText}
+									{#if image.extractedText && image.status === 'completed'}
+										<div class="flex items-center gap-0.5 sm:gap-1">
+											<Button
+												variant="ghost"
+												size="sm"
+												onclick={copyToClipboard}
+												class="h-6 gap-1 px-1.5 text-[10px] sm:h-7 sm:gap-1.5 sm:px-2 sm:text-xs"
+											>
+												{#if copied}
+													<svg
+														class="h-3 w-3 text-green-500"
+														fill="none"
+														viewBox="0 0 24 24"
+														stroke="currentColor"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M5 13l4 4L19 7"
+														/>
+													</svg>
+													<span class="font-medium text-green-600">Copied!</span>
+												{:else}
+													<svg
+														class="h-3 w-3"
+														fill="none"
+														viewBox="0 0 24 24"
+														stroke="currentColor"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+														/>
+													</svg>
+													<span class="font-medium">Copy</span>
+												{/if}
+											</Button>
+											<div class="h-4 w-px bg-border"></div>
+											<Button
+												variant="ghost"
+												size="sm"
+												onclick={downloadAsTxt}
+												class="h-6 px-1.5 text-[10px] sm:h-7 sm:px-2 sm:text-xs"
+												title="Download as TXT"
+											>
+												<span class="font-medium">.txt</span>
+											</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												onclick={downloadAsDocx}
+												class="h-6 px-1.5 text-[10px] sm:h-7 sm:px-2 sm:text-xs"
+												title="Download as DOC"
+											>
+												<span class="font-medium">.doc</span>
+											</Button>
+											<Button
+												variant="ghost"
+												size="sm"
+												onclick={downloadAsPdf}
+												class="h-6 px-1.5 text-[10px] sm:h-7 sm:px-2 sm:text-xs"
+												title="Download as PDF"
+											>
+												<span class="font-medium">.pdf</span>
+											</Button>
+										</div>
+									{/if}
+								</div>
+
+								<div class="flex-1 p-3 sm:p-4">
+									{#if image.status === 'pending'}
+										<div
+											class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 sm:min-h-[280px]"
+										>
+											<div class="relative">
+												<div
+													class="h-10 w-10 animate-spin rounded-full border-3 border-primary/20 border-t-primary sm:h-12 sm:w-12"
+												></div>
+												<div class="absolute inset-0 flex items-center justify-center">
+													<svg
+														class="h-3.5 w-3.5 animate-pulse text-primary sm:h-4 sm:w-4"
+														fill="none"
+														viewBox="0 0 24 24"
+														stroke="currentColor"
+													>
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															stroke-width="2"
+															d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+														/>
+													</svg>
+												</div>
+											</div>
+											<p class="animate-pulse text-xs text-muted-foreground sm:text-sm">
+												Waiting to process...
+											</p>
+										</div>
+									{:else if image.status === 'processing'}
+										<div class="flex h-full min-h-[200px] flex-col sm:min-h-[280px]">
+											{#if image.extractedText}
+												<!-- Show text streaming in real-time -->
+												<div class="mb-2 flex items-center justify-between gap-2 sm:mb-3">
+													<div class="flex items-center gap-2">
+														<div class="h-2 w-2 animate-pulse rounded-full bg-yellow-500"></div>
+														<span class="text-xs font-medium text-yellow-600 dark:text-yellow-400">
+															Extracting text...
+														</span>
+													</div>
+													<Button
+														variant="destructive"
+														size="sm"
+														onclick={handleCancel}
+														disabled={isCancelling}
+														class="h-7 gap-1 px-2 text-xs sm:h-8 sm:gap-1.5 sm:px-2.5"
+													>
+														{#if isCancelling}
+															<div
+																class="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent sm:h-3.5 sm:w-3.5"
+															></div>
+														{:else}
+															<svg
+																class="h-3 w-3 sm:h-3.5 sm:w-3.5"
+																fill="none"
+																viewBox="0 0 24 24"
+																stroke="currentColor"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M6 18L18 6M6 6l12 12"
+																/>
+															</svg>
+														{/if}
+														Cancel
+													</Button>
+												</div>
+												<div
+													class="prose prose-sm dark:prose-invert max-w-none p-0 flex-1 whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-sm"
+												>
+													{image.extractedText}<span class="animate-pulse text-primary">|</span>
+												</div>
+											{:else}
+												<!-- No text yet, show loading spinner with cancel button -->
+												<div
+													class="flex flex-1 flex-col items-center justify-center gap-3 sm:gap-4"
+												>
+													<div class="relative">
+														<div
+															class="h-10 w-10 animate-spin rounded-full border-3 border-primary/20 border-t-primary sm:h-12 sm:w-12"
+														></div>
+														<div class="absolute inset-0 flex items-center justify-center">
+															<svg
+																class="h-3.5 w-3.5 animate-pulse text-primary sm:h-4 sm:w-4"
+																fill="none"
+																viewBox="0 0 24 24"
+																stroke="currentColor"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+																/>
+															</svg>
+														</div>
+													</div>
+													<p class="animate-pulse text-xs text-muted-foreground sm:text-sm">
+														Analyzing document...
+													</p>
+													<Button
+														variant="destructive"
+														size="sm"
+														onclick={handleCancel}
+														disabled={isCancelling}
+														class="mt-1 h-8 gap-1.5 text-xs sm:mt-2 sm:h-9 sm:text-sm"
+													>
+														{#if isCancelling}
+															<div
+																class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+															></div>
+														{:else}
+															<svg
+																class="h-3.5 w-3.5"
+																fill="none"
+																viewBox="0 0 24 24"
+																stroke="currentColor"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M6 18L18 6M6 6l12 12"
+																/>
+															</svg>
+														{/if}
+														Cancel Processing
+													</Button>
+												</div>
+											{/if}
+										</div>
+									{:else if image.status === 'failed'}
+										<div
+											class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 sm:min-h-[280px] sm:gap-4"
+										>
+											<div class="rounded-full bg-destructive/10 p-3 sm:p-4">
+												<svg
+													class="h-6 w-6 text-destructive sm:h-8 sm:w-8"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+													/>
+												</svg>
+											</div>
+											<div class="text-center">
+												<p class="text-sm font-medium text-destructive sm:text-base">
+													Processing Failed
+												</p>
+												{#if image.errorMessage}
+													<p class="mt-1 max-w-sm px-4 text-xs text-muted-foreground sm:text-sm">
+														{image.errorMessage}
+													</p>
+												{/if}
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={openRescanDialog}
+												class="h-8 gap-1.5 text-xs sm:h-9 sm:text-sm"
+											>
+												<svg
+													class="h-3.5 w-3.5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+													/>
+												</svg>
+												Try Again
+											</Button>
+										</div>
+									{:else if image.status === 'cancelled'}
+										<div
+											class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 sm:min-h-[280px] sm:gap-4"
+										>
+											<div class="rounded-full bg-orange-500/10 p-3 sm:p-4">
+												<svg
+													class="h-6 w-6 text-orange-500 sm:h-8 sm:w-8"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+													/>
+												</svg>
+											</div>
+											<div class="text-center">
+												<p class="text-sm font-medium text-orange-500 sm:text-base">
+													Processing Cancelled
+												</p>
+												<p class="mt-1 px-4 text-xs text-muted-foreground sm:text-sm">
+													{#if image.extractedText}
+														Partial text was extracted before cancellation.
+													{:else}
+														No text was extracted before cancellation.
+													{/if}
+												</p>
+											</div>
+											<Button
+												variant="outline"
+												size="sm"
+												onclick={openRescanDialog}
+												class="h-8 gap-1.5 text-xs sm:h-9 sm:text-sm"
+											>
+												<svg
+													class="h-3.5 w-3.5"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+													/>
+												</svg>
+												Rescan
+											</Button>
+											{#if image.extractedText}
+												<div class="mt-3 w-full border-t pt-3 sm:mt-4 sm:pt-4">
+													<p class="mb-2 text-xs font-medium text-muted-foreground">
+														Partial Text:
+													</p>
+													<div
+														class="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-sm"
+													>
+														{image.extractedText}
+													</div>
+												</div>
+											{/if}
+										</div>
+									{:else if !image.extractedText}
+										<div
+											class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 text-muted-foreground/50 sm:min-h-[280px]"
+										>
+											<svg
+												class="h-10 w-10 opacity-20 sm:h-12 sm:w-12"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+												/>
+											</svg>
+											<p class="text-xs sm:text-sm">No text was extracted from this image.</p>
+										</div>
+									{:else}
+										<!-- Completed state with extracted text -->
+										<div
+											class="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap font-mono text-xs leading-relaxed sm:text-sm"
+										>
+											{image.extractedText}
+										</div>
+									{/if}
+								</div>
+
+								{#if image.customPrompt}
+									<div class="border-t px-3 py-2 sm:px-4 sm:py-3">
+										<p class="text-[10px] text-muted-foreground sm:text-xs">
+											<span class="font-medium">Custom prompt:</span>
+											<span class="italic">{image.customPrompt}</span>
+										</p>
 									</div>
 								{/if}
-							</div>
-
-							{#if image.customPrompt}
-								<div class="border-t px-3 py-2 sm:px-4 sm:py-3">
-									<p class="text-[10px] text-muted-foreground sm:text-xs">
-										<span class="font-medium">Custom prompt:</span>
-										<span class="italic">{image.customPrompt}</span>
-									</p>
-								</div>
-							{/if}
-						</Card.Root>
+							</Card.Root>
+						</div>
 					</div>
-				</div>
+				{/if}
 			{/if}
 		</div>
 	</main>

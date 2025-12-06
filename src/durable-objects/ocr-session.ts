@@ -21,6 +21,9 @@ interface ProcessRequest {
 	userId: string;
 	imageKey: string;
 	prompt: string;
+	isPdf?: boolean;
+	pageCount?: number;
+	pageImages?: string[] | null;
 }
 
 // Message types for WebSocket communication
@@ -28,6 +31,8 @@ type WSMessage =
 	| { type: 'connected' }
 	| { type: 'status'; status: 'processing' | 'completed' | 'failed' | 'cancelled' }
 	| { type: 'chunk'; text: string }
+	| { type: 'page-start'; pageNumber: number; totalPages: number }
+	| { type: 'page-complete'; pageNumber: number; totalPages: number; text: string }
 	| { type: 'complete'; text: string; processingTimeMs: number }
 	| { type: 'error'; message: string }
 	| { type: 'cancelled' }
@@ -255,8 +260,9 @@ export class OCRSession implements DurableObject {
 	private async processOCR(job: ProcessRequest): Promise<void> {
 		const startTime = Date.now();
 		const db = this.getDb();
+		const PAGE_DELIMITER = '\n\n---PAGE_BREAK---\n\n';
 
-		console.log('[OCRSession] Starting OCR for image:', job.imageId);
+		console.log('[OCRSession] Starting OCR for image:', job.imageId, 'isPdf:', job.isPdf);
 
 		try {
 			// Check if cancelled before starting
@@ -274,186 +280,54 @@ export class OCRSession implements DurableObject {
 			this.broadcast({ type: 'status', status: 'processing' });
 			await this.notifyDashboard(job.userId, job.imageId, 'processing', '');
 
-			// Get image from R2
-			console.log('[OCRSession] Fetching image from R2:', job.imageKey);
-			const object = await this.env.R2_BUCKET.get(job.imageKey);
-			if (!object) {
-				throw new Error('Image not found in R2: ' + job.imageKey);
+			// Determine which images to process
+			const imagesToProcess: string[] = [];
+			if (job.isPdf && job.pageImages && job.pageImages.length > 0) {
+				// For PDFs, process each page image
+				imagesToProcess.push(...job.pageImages);
+			} else {
+				// For regular images, process the single image
+				imagesToProcess.push(job.imageKey);
 			}
 
-			// Get image bytes and check if resizing is needed
-			let imageBytes = new Uint8Array(await object.arrayBuffer());
-			const contentType = object.httpMetadata?.contentType || 'image/jpeg';
+			const totalPages = imagesToProcess.length;
+			const pageTexts: string[] = [];
 
-			// Check image dimensions from custom metadata (stored during upload)
-			const originalWidth = parseInt(object.customMetadata?.width || '0', 10);
-			const originalHeight = parseInt(object.customMetadata?.height || '0', 10);
-			const MAX_DIMENSION = 1024;
+			// Process each page sequentially
+			for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+				const imageKey = imagesToProcess[pageIndex];
+				const pageNumber = pageIndex + 1;
 
-			// If image is too large, resize it
-			if (originalWidth > MAX_DIMENSION || originalHeight > MAX_DIMENSION) {
-				console.log(
-					`[OCRSession] Image too large (${originalWidth}x${originalHeight}), resizing...`
-				);
-				try {
-					imageBytes = await this.resizeImage(
-						imageBytes,
-						contentType,
-						originalWidth,
-						originalHeight,
-						MAX_DIMENSION
-					);
-					console.log(`[OCRSession] Image resized, new size: ${imageBytes.length} bytes`);
-				} catch (resizeError) {
-					console.warn('[OCRSession] Failed to resize image, using original:', resizeError);
-					// Continue with original image if resize fails
+				// Check for cancellation
+				if (this.isCancelled) {
+					console.log('[OCRSession] Processing cancelled before page', pageNumber);
+					return;
 				}
-			} else if (imageBytes.length > 5 * 1024 * 1024) {
-				// If no dimensions but file is > 5MB, try to resize anyway
-				console.log(
-					`[OCRSession] Image file large (${imageBytes.length} bytes), attempting resize...`
-				);
-				try {
-					imageBytes = await this.resizeImage(imageBytes, contentType, 0, 0, MAX_DIMENSION);
-					console.log(`[OCRSession] Image resized, new size: ${imageBytes.length} bytes`);
-				} catch (resizeError) {
-					console.warn('[OCRSession] Failed to resize image, using original:', resizeError);
+
+				// Broadcast page start for multi-page documents
+				if (totalPages > 1) {
+					this.broadcast({ type: 'page-start', pageNumber, totalPages });
 				}
-			}
 
-			// Convert to base64 using optimized approach
-			const bytes = imageBytes;
-			// Use chunks to avoid call stack issues with large images
-			const chunkSize = 32768;
-			let binary = '';
-			for (let i = 0; i < bytes.length; i += chunkSize) {
-				const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-				binary += String.fromCharCode(...chunk);
-			}
-			const imageBase64 = btoa(binary);
+				console.log(`[OCRSession] Processing page ${pageNumber}/${totalPages}: ${imageKey}`);
 
-			console.log('[OCRSession] Image converted to base64, length:', imageBase64.length);
+				// Process this page
+				const pageText = await this.processPage(imageKey, job.prompt);
+				pageTexts.push(pageText);
 
-			// Check if cancelled after image fetch
-			if (this.isCancelled) {
-				console.log('[OCRSession] Processing cancelled after image fetch');
-				return;
-			}
-
-			// Call Ollama with streaming - use instance abort controller
-			const OLLAMA_ENDPOINT = 'https://ollama.itsocr.com';
-			const timeoutId = setTimeout(() => this.abortController?.abort(), 300000); // 5 min timeout
-
-			let response: Response;
-			try {
-				response = await fetch(OLLAMA_ENDPOINT + '/api/generate', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({
-						model: 'minicpm-v',
-						prompt: job.prompt,
-						images: [imageBase64],
-						stream: true,
-						options: {
-							temperature: 0,
-							num_predict: 4096,
-							top_k: 1,
-							top_p: 0.1,
-							repeat_penalty: 1.2
-						}
-					}),
-					signal: this.abortController?.signal
-				});
-			} finally {
-				clearTimeout(timeoutId);
-			}
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				throw new Error('Ollama API error: ' + response.status + ' - ' + errorText);
-			}
-
-			// Stream the response
-			const reader = response.body?.getReader();
-			if (!reader) {
-				throw new Error('No response body from Ollama');
-			}
-
-			const decoder = new TextDecoder();
-			let buffer = '';
-			let chunkCount = 0;
-			let repetitionDetected = false;
-
-			try {
-				while (true) {
-					// Check for cancellation during streaming
-					if (this.isCancelled) {
-						console.log('[OCRSession] Processing cancelled during streaming');
-						break;
-					}
-
-					const { done, value } = await reader.read();
-					if (done) break;
-
-					buffer += decoder.decode(value, { stream: true });
-					const lines = buffer.split('\n');
-					buffer = lines.pop() || '';
-
-					for (const line of lines) {
-						const trimmedLine = line.trim();
-						if (!trimmedLine) continue;
-
-						try {
-							const chunk = JSON.parse(trimmedLine) as { response?: string; done?: boolean };
-							if (chunk.response) {
-								this.extractedText += chunk.response;
-								chunkCount++;
-
-								// Broadcast chunk to all connected WebSockets
-								this.broadcast({ type: 'chunk', text: chunk.response });
-							}
-						} catch {
-							// Skip unparseable lines
-						}
-					}
-
-					// Check for repetition every 10 chunks
-					if (
-						chunkCount % 10 === 0 &&
-						chunkCount > 0 &&
-						this.detectRepetition(this.extractedText)
-					) {
-						console.log('[OCRSession] Repetition detected, stopping stream');
-						repetitionDetected = true;
-						break;
-					}
+				// Broadcast page completion for multi-page documents
+				if (totalPages > 1) {
+					this.broadcast({ type: 'page-complete', pageNumber, totalPages, text: pageText });
 				}
-			} finally {
-				reader.releaseLock();
+
+				// Update extractedText with concatenated text so far
+				this.extractedText = pageTexts.join(PAGE_DELIMITER);
 			}
 
-			// If cancelled, don't proceed with completion
+			// If cancelled during processing, don't complete
 			if (this.isCancelled) {
 				console.log('[OCRSession] Processing was cancelled, not completing');
 				return;
-			}
-
-			// Trim repetition if detected
-			if (repetitionDetected) {
-				this.extractedText = this.trimRepetition(this.extractedText);
-			}
-
-			// Process remaining buffer
-			if (!repetitionDetected && buffer.trim()) {
-				try {
-					const chunk = JSON.parse(buffer.trim()) as { response?: string };
-					if (chunk.response) {
-						this.extractedText += chunk.response;
-						this.broadcast({ type: 'chunk', text: chunk.response });
-					}
-				} catch {
-					// Ignore
-				}
 			}
 
 			// Complete successfully
@@ -461,19 +335,8 @@ export class OCRSession implements DurableObject {
 			this.status = 'completed';
 			this.isProcessing = false;
 
-			// Clean up the extracted text
-			let finalText = this.extractedText.trim();
-
-			// Remove trailing period that the model sometimes adds incorrectly
-			// Only remove if it looks like it was added by the model (single trailing dot)
-			if (finalText.endsWith('.') && !finalText.endsWith('..')) {
-				// Check if the second-to-last char suggests this is model-added
-				const beforeDot = finalText.slice(-2, -1);
-				// If it ends with letter/number + dot (not punctuation + dot), likely model-added
-				if (/[a-zA-Z0-9]/.test(beforeDot)) {
-					finalText = finalText.slice(0, -1);
-				}
-			}
+			// Final text is all pages joined with delimiter
+			const finalText = pageTexts.join(PAGE_DELIMITER);
 
 			// Save to database
 			await db.execute({
@@ -482,8 +345,9 @@ export class OCRSession implements DurableObject {
 			});
 
 			console.log(
-				'[OCRSession] Completed. Chunks:',
-				chunkCount,
+				'[OCRSession] Completed.',
+				'Pages:',
+				totalPages,
 				'Text length:',
 				finalText.length,
 				'Time:',
@@ -533,6 +397,167 @@ export class OCRSession implements DurableObject {
 	}
 
 	/**
+	 * Process a single page/image and return the extracted text
+	 */
+	private async processPage(imageKey: string, prompt: string): Promise<string> {
+		// Get image from R2
+		console.log('[OCRSession] Fetching image from R2:', imageKey);
+		const object = await this.env.R2_BUCKET.get(imageKey);
+		if (!object) {
+			throw new Error('Image not found in R2: ' + imageKey);
+		}
+
+		// Get image bytes and check if resizing is needed
+		let imageBytes = new Uint8Array(await object.arrayBuffer());
+		const contentType = object.httpMetadata?.contentType || 'image/jpeg';
+
+		// Check image dimensions from custom metadata (stored during upload)
+		const originalWidth = parseInt(object.customMetadata?.width || '0', 10);
+		const originalHeight = parseInt(object.customMetadata?.height || '0', 10);
+		const MAX_DIMENSION = 1024;
+
+		// If image is too large, resize it
+		if (originalWidth > MAX_DIMENSION || originalHeight > MAX_DIMENSION) {
+			console.log(`[OCRSession] Image too large (${originalWidth}x${originalHeight}), resizing...`);
+			try {
+				imageBytes = await this.resizeImage(
+					imageBytes,
+					contentType,
+					originalWidth,
+					originalHeight,
+					MAX_DIMENSION
+				);
+				console.log(`[OCRSession] Image resized, new size: ${imageBytes.length} bytes`);
+			} catch (resizeError) {
+				console.warn('[OCRSession] Failed to resize image, using original:', resizeError);
+			}
+		} else if (imageBytes.length > 5 * 1024 * 1024) {
+			// If no dimensions but file is > 5MB, try to resize anyway
+			console.log(
+				`[OCRSession] Image file large (${imageBytes.length} bytes), attempting resize...`
+			);
+			try {
+				imageBytes = await this.resizeImage(imageBytes, contentType, 0, 0, MAX_DIMENSION);
+				console.log(`[OCRSession] Image resized, new size: ${imageBytes.length} bytes`);
+			} catch (resizeError) {
+				console.warn('[OCRSession] Failed to resize image, using original:', resizeError);
+			}
+		}
+
+		// Convert to base64 using optimized approach
+		const bytes = imageBytes;
+		const chunkSize = 32768;
+		let binary = '';
+		for (let i = 0; i < bytes.length; i += chunkSize) {
+			const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+			binary += String.fromCharCode(...chunk);
+		}
+		const imageBase64 = btoa(binary);
+
+		console.log('[OCRSession] Image converted to base64, length:', imageBase64.length);
+
+		// Check if cancelled
+		if (this.isCancelled) {
+			throw new Error('Processing cancelled');
+		}
+
+		// Call Ollama with streaming - using qwen3-vl for better OCR accuracy
+		const OLLAMA_ENDPOINT = 'https://ollama.itsocr.com';
+		const timeoutId = setTimeout(() => this.abortController?.abort(), 300000); // 5 min timeout
+
+		let response: Response;
+		try {
+			response = await fetch(OLLAMA_ENDPOINT + '/api/generate', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					model: 'qwen3-vl',
+					prompt: prompt,
+					images: [imageBase64],
+					stream: true,
+					options: {
+						temperature: 0,
+						num_predict: 8192, // Enough for full page of text
+						num_ctx: 2048, // Smaller context = less RAM, faster
+						num_gpu: 999, // Offload all layers to GPU (Metal on M2)
+						main_gpu: 0
+					},
+					keep_alive: '30m' // Keep model loaded for 30 minutes
+				}),
+				signal: this.abortController?.signal
+			});
+		} finally {
+			clearTimeout(timeoutId);
+		}
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error('Ollama API error: ' + response.status + ' - ' + errorText);
+		}
+
+		// Stream the response
+		const reader = response.body?.getReader();
+		if (!reader) {
+			throw new Error('No response body from Ollama');
+		}
+
+		const decoder = new TextDecoder();
+		let buffer = '';
+		let pageText = '';
+
+		try {
+			while (true) {
+				// Check for cancellation during streaming
+				if (this.isCancelled) {
+					console.log('[OCRSession] Processing cancelled during streaming');
+					throw new Error('Processing cancelled');
+				}
+
+				const { done, value } = await reader.read();
+				if (done) break;
+
+				buffer += decoder.decode(value, { stream: true });
+				const lines = buffer.split('\n');
+				buffer = lines.pop() || '';
+
+				for (const line of lines) {
+					const trimmedLine = line.trim();
+					if (!trimmedLine) continue;
+
+					try {
+						const chunk = JSON.parse(trimmedLine) as { response?: string; done?: boolean };
+						if (chunk.response) {
+							pageText += chunk.response;
+
+							// Broadcast chunk to all connected WebSockets
+							this.broadcast({ type: 'chunk', text: chunk.response });
+						}
+					} catch {
+						// Skip unparseable lines
+					}
+				}
+			}
+		} finally {
+			reader.releaseLock();
+		}
+
+		// Process remaining buffer (no post-processing, just get the last chunk)
+		if (buffer.trim()) {
+			try {
+				const chunk = JSON.parse(buffer.trim()) as { response?: string };
+				if (chunk.response) {
+					pageText += chunk.response;
+					this.broadcast({ type: 'chunk', text: chunk.response });
+				}
+			} catch {
+				// Ignore
+			}
+		}
+
+		return pageText.trim();
+	}
+
+	/**
 	 * Log image size info for debugging
 	 * Note: Workers don't have native image resizing capability.
 	 * For production, consider:
@@ -563,52 +588,6 @@ export class OCRSession implements DurableObject {
 			`[OCRSession] Using original image (${(imageBytes.length / 1024 / 1024).toFixed(2)}MB)`
 		);
 		return imageBytes;
-	}
-
-	private detectRepetition(text: string): boolean {
-		if (text.length < 50) return false;
-
-		const tail = text.slice(-500);
-		for (let len = 20; len <= 150; len++) {
-			if (tail.length < len * 2) continue;
-
-			const phrase = tail.slice(-len);
-			const rest = tail.slice(0, -len);
-
-			let count = 0;
-			let pos = rest.indexOf(phrase);
-			while (pos !== -1) {
-				count++;
-				pos = rest.indexOf(phrase, pos + 1);
-			}
-
-			if (count >= 2) {
-				return true;
-			}
-		}
-		return false;
-	}
-
-	private trimRepetition(text: string): string {
-		let bestCutPoint = text.length;
-
-		for (let len = 20; len <= 150; len++) {
-			if (text.length < len * 2) continue;
-
-			for (let start = 0; start < text.length - len * 2; start++) {
-				const phrase = text.slice(start, start + len);
-				const nextOccurrence = text.indexOf(phrase, start + len);
-
-				if (nextOccurrence !== -1 && nextOccurrence < bestCutPoint) {
-					bestCutPoint = nextOccurrence;
-					break;
-				}
-			}
-
-			if (bestCutPoint < text.length) break;
-		}
-
-		return bestCutPoint < text.length ? text.slice(0, bestCutPoint).trim() : text;
 	}
 
 	// WebSocket event handlers for Hibernation API

@@ -14,7 +14,7 @@ import { generateId, now, getFileExtension } from '$lib/server/utils';
 import { checkUploadLimits, incrementUsage } from '$lib/server/services/usage';
 
 // Allowed image MIME types
-const ALLOWED_MIME_TYPES = [
+const ALLOWED_IMAGE_MIME_TYPES = [
 	'image/jpeg',
 	'image/png',
 	'image/gif',
@@ -25,9 +25,20 @@ const ALLOWED_MIME_TYPES = [
 	'image/bmp'
 ] as const;
 
+// PDF MIME type
+const PDF_MIME_TYPE = 'application/pdf' as const;
+
+// All allowed MIME types (images + PDF)
+const ALLOWED_MIME_TYPES = [...ALLOWED_IMAGE_MIME_TYPES, PDF_MIME_TYPE] as const;
+
 const mimeTypeSchema = z.enum(ALLOWED_MIME_TYPES, {
-	message: 'Invalid image type. Allowed: JPEG, PNG, GIF, WebP, HEIC, TIFF, BMP'
+	message: 'Invalid file type. Allowed: JPEG, PNG, GIF, WebP, HEIC, TIFF, BMP, PDF'
 });
+
+// Helper to check if a MIME type is PDF
+export function isPdfMimeType(mimeType: string): boolean {
+	return mimeType === PDF_MIME_TYPE;
+}
 
 export const imagesRouter = router({
 	list: protectedProcedure
@@ -147,6 +158,8 @@ export const imagesRouter = router({
 				fileSizeBytes: z.number().positive(),
 				width: z.number().positive().optional(),
 				height: z.number().positive().optional(),
+				pageCount: z.number().positive().optional(), // For PDFs
+				pageImages: z.array(z.string()).optional(), // R2 keys for page images
 				customPrompt: z.string().max(1000).optional()
 			})
 		)
@@ -169,15 +182,16 @@ export const imagesRouter = router({
 				});
 			}
 
-			// Verify image exists in R2
+			// Verify file exists in R2
 			const object = await platform.env.R2_BUCKET.head(input.imageKey);
 			if (!object) {
 				throw new TRPCError({
 					code: 'BAD_REQUEST',
-					message: 'Image not found. Please upload the image first.'
+					message: 'File not found. Please upload the file first.'
 				});
 			}
 
+			const isPdf = isPdfMimeType(input.mimeType);
 			const timestamp = now();
 			const originalUrl = `/api/images/${input.imageKey}`;
 
@@ -192,6 +206,9 @@ export const imagesRouter = router({
 				fileSizeBytes: input.fileSizeBytes,
 				width: input.width,
 				height: input.height,
+				isPdf,
+				pageCount: isPdf ? input.pageCount : 1,
+				pageImages: isPdf ? input.pageImages : null,
 				customPrompt: input.customPrompt,
 				status: 'pending',
 				createdAt: timestamp,
@@ -206,6 +223,8 @@ export const imagesRouter = router({
 			// Return info for client to connect via WebSocket and trigger processing
 			return {
 				id: input.imageId,
+				isPdf,
+				pageCount: isPdf ? input.pageCount : 1,
 				status: 'pending',
 				wsUrl: `/api/ocr/${input.imageId}/ws`,
 				processUrl: `/api/ocr/${input.imageId}/process`,
@@ -213,7 +232,10 @@ export const imagesRouter = router({
 					imageId: input.imageId,
 					userId: ctx.user.id,
 					imageKey: input.imageKey,
-					prompt
+					prompt,
+					isPdf,
+					pageCount: isPdf ? input.pageCount : 1,
+					pageImages: isPdf ? input.pageImages : null
 				}
 			};
 		}),
@@ -275,6 +297,8 @@ export const imagesRouter = router({
 
 			return {
 				id: input.id,
+				isPdf: existing.isPdf,
+				pageCount: existing.isPdf ? existing.pageCount : 1,
 				status: 'pending',
 				wsUrl: `/api/ocr/${input.id}/ws`,
 				processUrl: `/api/ocr/${input.id}/process`,
@@ -282,7 +306,10 @@ export const imagesRouter = router({
 					imageId: input.id,
 					userId: ctx.user.id,
 					imageKey: existing.imageKey,
-					prompt
+					prompt,
+					isPdf: existing.isPdf,
+					pageCount: existing.isPdf ? existing.pageCount : 1,
+					pageImages: existing.isPdf ? existing.pageImages : null
 				}
 			};
 		}),
@@ -292,7 +319,7 @@ export const imagesRouter = router({
 		.mutation(async ({ ctx, input }) => {
 			const existing = await db.query.scannedImage.findFirst({
 				where: and(eq(scannedImage.id, input.id), eq(scannedImage.userId, ctx.user.id)),
-				columns: { id: true, imageKey: true }
+				columns: { id: true, imageKey: true, isPdf: true, pageImages: true }
 			});
 
 			if (!existing) {
@@ -302,11 +329,20 @@ export const imagesRouter = router({
 				});
 			}
 
+			// Collect all R2 keys to delete (original + page images for PDFs)
+			const keysToDelete: string[] = [];
+			if (existing.imageKey) {
+				keysToDelete.push(existing.imageKey);
+			}
+			if (existing.isPdf && existing.pageImages) {
+				keysToDelete.push(...existing.pageImages);
+			}
+
 			// Delete from R2 and DB in parallel
 			const platform = ctx.platform;
 			await Promise.all([
-				platform?.env?.R2_BUCKET && existing.imageKey
-					? platform.env.R2_BUCKET.delete(existing.imageKey)
+				platform?.env?.R2_BUCKET && keysToDelete.length > 0
+					? Promise.all(keysToDelete.map((key) => platform.env.R2_BUCKET.delete(key)))
 					: Promise.resolve(),
 				db.delete(scannedImage).where(eq(scannedImage.id, input.id))
 			]);
@@ -322,7 +358,7 @@ export const imagesRouter = router({
 			// Get all images that belong to this user
 			const existingImages = await db.query.scannedImage.findMany({
 				where: and(eq(scannedImage.userId, ctx.user.id), inArray(scannedImage.id, ids)),
-				columns: { id: true, imageKey: true }
+				columns: { id: true, imageKey: true, isPdf: true, pageImages: true }
 			});
 
 			if (existingImages.length === 0) {
@@ -332,15 +368,25 @@ export const imagesRouter = router({
 				});
 			}
 
-			const platform = ctx.platform;
-			const imageKeys = existingImages.map((img) => img.imageKey).filter(Boolean) as string[];
+			// Collect all R2 keys to delete (original files + page images for PDFs)
+			const keysToDelete: string[] = [];
+			for (const img of existingImages) {
+				if (img.imageKey) {
+					keysToDelete.push(img.imageKey);
+				}
+				if (img.isPdf && img.pageImages) {
+					keysToDelete.push(...img.pageImages);
+				}
+			}
 			const imageIds = existingImages.map((img) => img.id);
+
+			const platform = ctx.platform;
 
 			// Delete from R2 and DB in parallel
 			await Promise.all([
 				// Delete all images from R2
-				platform?.env?.R2_BUCKET && imageKeys.length > 0
-					? Promise.all(imageKeys.map((key) => platform.env.R2_BUCKET.delete(key)))
+				platform?.env?.R2_BUCKET && keysToDelete.length > 0
+					? Promise.all(keysToDelete.map((key) => platform.env.R2_BUCKET.delete(key)))
 					: Promise.resolve(),
 				// Delete all from DB
 				db
