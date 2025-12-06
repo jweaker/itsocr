@@ -9,7 +9,7 @@ AI-powered OCR service built on Cloudflare Workers. Upload images, extract text 
 - **Database**: Turso (LibSQL)
 - **Storage**: Cloudflare R2
 - **Auth**: Better Auth (email/password + OAuth)
-- **OCR**: Ollama with MiniCPM-V (self-hosted)
+- **OCR**: Ollama with Llama 3.2 Vision (self-hosted)
 - **API**: tRPC
 
 ## Architecture
@@ -31,14 +31,14 @@ Client → SvelteKit → Durable Object → Ollama
 - pnpm
 - Cloudflare account (Workers paid plan for Durable Objects)
 - Turso database
-- Ollama instance with `minicpm-v` model
+- Ollama instance with `llama3.2-vision:latest` model
 
 ### Ollama Setup
 
 Run Ollama with the vision model:
 
 ```bash
-ollama pull minicpm-v
+ollama pull llama3.2-vision:latest
 ollama serve
 ```
 

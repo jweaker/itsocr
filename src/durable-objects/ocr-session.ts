@@ -467,7 +467,7 @@ export class OCRSession implements DurableObject {
 			throw new Error('Processing cancelled');
 		}
 
-		// Call Ollama with streaming - using qwen3-vl for better OCR accuracy
+		// Call Ollama with streaming - using llama3.2-vision for OCR
 		const OLLAMA_ENDPOINT = 'https://ollama.itsocr.com';
 		const timeoutId = setTimeout(() => this.abortController?.abort(), 300000); // 5 min timeout
 
@@ -477,14 +477,14 @@ export class OCRSession implements DurableObject {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					model: 'qwen3-vl',
+					model: 'llama3.2-vision:latest',
 					prompt: prompt,
 					images: [imageBase64],
 					stream: true,
 					options: {
 						temperature: 0,
 						num_predict: 8192, // Enough for full page of text
-						num_ctx: 2048, // Smaller context = less RAM, faster
+						num_ctx: 8192, // Larger context for better document understanding
 						num_gpu: 999, // Offload all layers to GPU (Metal on M2)
 						main_gpu: 0
 					},

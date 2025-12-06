@@ -74,6 +74,18 @@ function createAuth() {
 			// In dev mode, always use localhost. In production, use BETTER_AUTH_BASE_URL
 			baseURL: dev ? 'http://localhost:5173' : env.BETTER_AUTH_BASE_URL,
 			trustedOrigins,
+			// Cookie settings for better compatibility with in-app browsers (Telegram, etc.)
+			advanced: {
+				cookiePrefix: 'itsocr',
+				// Use 'none' for cross-site compatibility in in-app browsers
+				// Secure is always true in production (HTTPS)
+				defaultCookieAttributes: {
+					sameSite: 'none',
+					secure: !dev,
+					httpOnly: true,
+					path: '/'
+				}
+			},
 			emailAndPassword: {
 				enabled: true,
 				requireEmailVerification: false
