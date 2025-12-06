@@ -12,6 +12,7 @@
 	interface Props {
 		data: {
 			imageId: string;
+			isDuplicate?: boolean;
 			user: {
 				id: string;
 				name: string;
@@ -81,6 +82,9 @@
 	let isRescanDialogOpen = $state(false);
 	let isRescanning = $state(false);
 	let rescanPrompt = $state('');
+
+	// Duplicate notice state
+	let showDuplicateNotice = $state(data.isDuplicate ?? false);
 
 	// WebSocket for real-time updates
 	let ws: WebSocket | null = null;
@@ -558,6 +562,40 @@
 			</div>
 		</div>
 	</header>
+
+	<!-- Duplicate Notice Banner -->
+	{#if showDuplicateNotice}
+		<div class="border-b bg-blue-50 dark:bg-blue-950/30">
+			<div class="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
+				<div class="flex items-center gap-2 text-xs text-blue-700 dark:text-blue-300 sm:text-sm">
+					<svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+						/>
+					</svg>
+					<span>This image was already scanned. Showing your previous result.</span>
+				</div>
+				<button
+					type="button"
+					class="flex-shrink-0 rounded p-1 text-blue-600 hover:bg-blue-100 dark:text-blue-400 dark:hover:bg-blue-900/50"
+					onclick={() => (showDuplicateNotice = false)}
+					aria-label="Dismiss"
+				>
+					<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						/>
+					</svg>
+				</button>
+			</div>
+		</div>
+	{/if}
 
 	<!-- Main Content -->
 	<main class="flex-1">

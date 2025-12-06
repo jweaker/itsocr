@@ -426,6 +426,12 @@
 		try {
 			const isPdf = isPdfMimeType(uploadFile.type);
 
+			// Compute SHA-256 hash for duplicate detection
+			const fileBuffer = await uploadFile.arrayBuffer();
+			const hashBuffer = await crypto.subtle.digest('SHA-256', fileBuffer);
+			const hashArray = Array.from(new Uint8Array(hashBuffer));
+			const contentHash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+
 			// 1. Get upload URL for the original file
 			const { imageId, imageKey, uploadUrl } = await trpc.images.getUploadUrl.mutate({
 				fileName: uploadFile.name,
@@ -482,12 +488,13 @@
 			const width = (uploadFile as any)._width;
 			const height = (uploadFile as any)._height;
 
-			await trpc.images.create.mutate({
+			const result = await trpc.images.create.mutate({
 				imageId,
 				imageKey,
 				fileName: uploadFile.name,
 				mimeType: uploadFile.type as any,
 				fileSizeBytes: uploadFile.size,
+				contentHash,
 				width: width ? Math.round(width) : undefined,
 				height: height ? Math.round(height) : undefined,
 				pageCount: isPdf ? pageCount : undefined,
@@ -497,7 +504,13 @@
 
 			// 5. Close modal and navigate to image page
 			closeUploadModal();
-			goto(`/image/${imageId}`);
+
+			// If duplicate found, navigate to existing image with duplicate flag
+			if (result.isDuplicate) {
+				goto(`/image/${result.id}?duplicate=1`);
+			} else {
+				goto(`/image/${imageId}`);
+			}
 		} catch (e) {
 			console.error('Upload failed:', e);
 			uploadError = e instanceof Error ? e.message : 'Upload failed';

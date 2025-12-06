@@ -80,6 +80,7 @@ export const scannedImage = sqliteTable(
 		thumbnailUrl: text('thumbnail_url'),
 		mimeType: text('mime_type').notNull(),
 		fileSizeBytes: integer('file_size_bytes').notNull(),
+		contentHash: text('content_hash'), // SHA-256 hash for duplicate detection
 		width: integer('width'),
 		height: integer('height'),
 		// PDF-specific fields
@@ -101,6 +102,7 @@ export const scannedImage = sqliteTable(
 		index('scanned_image_user_idx').on(table.userId),
 		index('scanned_image_created_idx').on(table.createdAt),
 		index('scanned_image_status_idx').on(table.status),
+		index('scanned_image_hash_idx').on(table.userId, table.contentHash), // For duplicate lookup
 		uniqueIndex('scanned_image_key_idx').on(table.imageKey)
 	]
 );

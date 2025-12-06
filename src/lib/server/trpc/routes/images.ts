@@ -156,6 +156,7 @@ export const imagesRouter = router({
 				fileName: z.string().min(1).max(255),
 				mimeType: mimeTypeSchema,
 				fileSizeBytes: z.number().positive(),
+				contentHash: z.string().length(64).optional(), // SHA-256 hash (64 hex chars)
 				width: z.number().positive().optional(),
 				height: z.number().positive().optional(),
 				pageCount: z.number().positive().optional(), // For PDFs
@@ -182,6 +183,36 @@ export const imagesRouter = router({
 				});
 			}
 
+			// Check for duplicate image by content hash (same user, same content)
+			if (input.contentHash) {
+				const existing = await db.query.scannedImage.findFirst({
+					where: and(
+						eq(scannedImage.userId, ctx.user.id),
+						eq(scannedImage.contentHash, input.contentHash),
+						eq(scannedImage.status, 'completed')
+					),
+					columns: {
+						id: true,
+						extractedText: true,
+						processingTimeMs: true,
+						customPrompt: true
+					}
+				});
+
+				if (existing && existing.extractedText) {
+					// Found a completed duplicate - delete the uploaded file and return existing
+					await platform.env.R2_BUCKET.delete(input.imageKey);
+
+					return {
+						id: existing.id,
+						isDuplicate: true,
+						existingText: existing.extractedText,
+						processingTimeMs: existing.processingTimeMs,
+						status: 'completed' as const
+					};
+				}
+			}
+
 			// Verify file exists in R2
 			const object = await platform.env.R2_BUCKET.head(input.imageKey);
 			if (!object) {
@@ -204,6 +235,7 @@ export const imagesRouter = router({
 				originalUrl,
 				mimeType: input.mimeType,
 				fileSizeBytes: input.fileSizeBytes,
+				contentHash: input.contentHash,
 				width: input.width,
 				height: input.height,
 				isPdf,
@@ -223,9 +255,10 @@ export const imagesRouter = router({
 			// Return info for client to connect via WebSocket and trigger processing
 			return {
 				id: input.imageId,
+				isDuplicate: false,
 				isPdf,
 				pageCount: isPdf ? input.pageCount : 1,
-				status: 'pending',
+				status: 'pending' as const,
 				wsUrl: `/api/ocr/${input.imageId}/ws`,
 				processUrl: `/api/ocr/${input.imageId}/process`,
 				processPayload: {
