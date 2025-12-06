@@ -1,7 +1,10 @@
 // Model configuration
 export const OCR_MODEL = 'llama3.2-vision:latest';
-export const OCR_MAX_TOKENS = 8192;
-export const OCR_CONTEXT_SIZE = 8192;
+export const OCR_MAX_TOKENS = 16384;
+export const OCR_CONTEXT_SIZE = 16384;
+
+// Parallel processing configuration for PDFs
+export const PDF_PARALLEL_PAGES = 4; // Process 4 pages at a time on A5000
 
 /**
  * Build the OCR prompt based on whether custom instructions are provided
@@ -10,16 +13,8 @@ export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
 	if (!custom) {
-		// Default OCR mode - clear instructions for Llama 3.2 Vision
-		return `You are an OCR assistant. Extract all visible text from this image.
-
-Rules:
-- Output ONLY the extracted text, nothing else
-- Preserve the original formatting, spacing, and line breaks
-- Maintain the reading order (left-to-right, top-to-bottom)
-- Include all text: headings, paragraphs, labels, captions, etc.
-- If text is unclear, make your best attempt
-- Do not describe the image or add any commentary`;
+		// Simple, direct OCR prompt - just extract text, nothing else
+		return 'Extract all text from this image.';
 	}
 
 	// Custom prompt mode
@@ -74,8 +69,12 @@ export async function processImageWithOllama(
 				options: {
 					temperature: 0,
 					num_predict: OCR_MAX_TOKENS,
-					num_ctx: OCR_CONTEXT_SIZE
-				}
+					num_ctx: OCR_CONTEXT_SIZE,
+					num_gpu: 999,
+					main_gpu: 0,
+					num_thread: 8
+				},
+				keep_alive: '30m'
 			})
 		});
 

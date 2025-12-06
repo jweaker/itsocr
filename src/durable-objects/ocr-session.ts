@@ -267,6 +267,7 @@ export class OCRSession implements DurableObject {
 		const startTime = Date.now();
 		const db = this.getDb();
 		const PAGE_DELIMITER = '\n\n---PAGE_BREAK---\n\n';
+		const PARALLEL_BATCH_SIZE = 4; // Process 4 pages in parallel on A5000
 
 		console.log('[OCRSession] Starting OCR for image:', job.imageId, 'isPdf:', job.isPdf);
 
@@ -297,37 +298,65 @@ export class OCRSession implements DurableObject {
 			}
 
 			const totalPages = imagesToProcess.length;
-			const pageTexts: string[] = [];
+			const pageTexts: string[] = new Array(totalPages).fill('');
 
-			// Process each page sequentially
-			for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
-				const imageKey = imagesToProcess[pageIndex];
-				const pageNumber = pageIndex + 1;
+			// Process pages in parallel batches for PDFs, sequentially for single images
+			if (totalPages > 1) {
+				// Parallel processing for multi-page PDFs
+				for (let batchStart = 0; batchStart < totalPages; batchStart += PARALLEL_BATCH_SIZE) {
+					// Check for cancellation before each batch
+					if (this.isCancelled) {
+						console.log(
+							'[OCRSession] Processing cancelled before batch starting at page',
+							batchStart + 1
+						);
+						return;
+					}
 
-				// Check for cancellation
-				if (this.isCancelled) {
-					console.log('[OCRSession] Processing cancelled before page', pageNumber);
-					return;
+					const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, totalPages);
+					const batchIndices = [];
+					for (let i = batchStart; i < batchEnd; i++) {
+						batchIndices.push(i);
+					}
+
+					console.log(
+						`[OCRSession] Processing batch: pages ${batchStart + 1}-${batchEnd} of ${totalPages}`
+					);
+
+					// Broadcast batch start
+					this.broadcast({ type: 'page-start', pageNumber: batchStart + 1, totalPages });
+
+					// Process batch in parallel
+					const batchPromises = batchIndices.map(async (pageIndex) => {
+						const imageKey = imagesToProcess[pageIndex];
+						const pageNumber = pageIndex + 1;
+						console.log(`[OCRSession] Processing page ${pageNumber}/${totalPages}: ${imageKey}`);
+
+						const pageText = await this.processPageNonStreaming(imageKey, job.prompt);
+						return { pageIndex, pageText };
+					});
+
+					const batchResults = await Promise.all(batchPromises);
+
+					// Store results in order and broadcast completions
+					for (const { pageIndex, pageText } of batchResults) {
+						pageTexts[pageIndex] = pageText;
+						this.broadcast({
+							type: 'page-complete',
+							pageNumber: pageIndex + 1,
+							totalPages,
+							text: pageText
+						});
+					}
+
+					// Update extractedText with all text so far
+					this.extractedText = pageTexts.filter((t) => t).join(PAGE_DELIMITER);
 				}
-
-				// Broadcast page start for multi-page documents
-				if (totalPages > 1) {
-					this.broadcast({ type: 'page-start', pageNumber, totalPages });
-				}
-
-				console.log(`[OCRSession] Processing page ${pageNumber}/${totalPages}: ${imageKey}`);
-
-				// Process this page
-				const pageText = await this.processPage(imageKey, job.prompt);
-				pageTexts.push(pageText);
-
-				// Broadcast page completion for multi-page documents
-				if (totalPages > 1) {
-					this.broadcast({ type: 'page-complete', pageNumber, totalPages, text: pageText });
-				}
-
-				// Update extractedText with concatenated text so far
-				this.extractedText = pageTexts.join(PAGE_DELIMITER);
+			} else {
+				// Single image - use streaming for real-time feedback
+				const pageText = await this.processPage(imagesToProcess[0], job.prompt);
+				pageTexts[0] = pageText;
+				this.extractedText = pageText;
 			}
 
 			// If cancelled during processing, don't complete
@@ -483,12 +512,13 @@ export class OCRSession implements DurableObject {
 					stream: true,
 					options: {
 						temperature: 0,
-						num_predict: 8192, // Enough for full page of text
-						num_ctx: 8192, // Larger context for better document understanding
-						num_gpu: 999, // Offload all layers to GPU (Metal on M2)
-						main_gpu: 0
+						num_predict: 16384,
+						num_ctx: 16384,
+						num_gpu: 999,
+						main_gpu: 0,
+						num_thread: 8
 					},
-					keep_alive: '30m' // Keep model loaded for 30 minutes
+					keep_alive: '30m'
 				}),
 				signal: this.abortController?.signal
 			});
@@ -561,6 +591,70 @@ export class OCRSession implements DurableObject {
 		}
 
 		return pageText.trim();
+	}
+
+	/**
+	 * Process a single page/image without streaming (for parallel processing)
+	 * Returns the extracted text
+	 */
+	private async processPageNonStreaming(imageKey: string, prompt: string): Promise<string> {
+		// Get image from R2
+		console.log('[OCRSession] Fetching image from R2:', imageKey);
+		const object = await this.env.R2_BUCKET.get(imageKey);
+		if (!object) {
+			throw new Error('Image not found in R2: ' + imageKey);
+		}
+
+		// Get image bytes
+		const imageBytes = new Uint8Array(await object.arrayBuffer());
+
+		// Convert to base64 using optimized approach
+		const chunkSize = 32768;
+		let binary = '';
+		for (let i = 0; i < imageBytes.length; i += chunkSize) {
+			const chunk = imageBytes.subarray(i, Math.min(i + chunkSize, imageBytes.length));
+			binary += String.fromCharCode(...chunk);
+		}
+		const imageBase64 = btoa(binary);
+
+		console.log('[OCRSession] Image converted to base64, length:', imageBase64.length);
+
+		// Check if cancelled
+		if (this.isCancelled) {
+			throw new Error('Processing cancelled');
+		}
+
+		// Call Ollama without streaming for parallel processing
+		const OLLAMA_ENDPOINT = 'https://ollama.itsocr.com';
+
+		const response = await fetch(OLLAMA_ENDPOINT + '/api/generate', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				model: 'llama3.2-vision:latest',
+				prompt: prompt,
+				images: [imageBase64],
+				stream: false,
+				options: {
+					temperature: 0,
+					num_predict: 16384,
+					num_ctx: 16384,
+					num_gpu: 999,
+					main_gpu: 0,
+					num_thread: 8
+				},
+				keep_alive: '30m'
+			}),
+			signal: this.abortController?.signal
+		});
+
+		if (!response.ok) {
+			const errorText = await response.text();
+			throw new Error('Ollama API error: ' + response.status + ' - ' + errorText);
+		}
+
+		const data = (await response.json()) as { response: string };
+		return (data.response || '').trim();
 	}
 
 	/**
