@@ -10,23 +10,29 @@ export function buildPrompt(customPrompt?: string | null): string {
 
 	if (!custom) {
 		// Default OCR mode - strict text extraction only
-		return `OCR this image. Extract all visible text exactly as it appears.
+		return `Extract all text from this image exactly as shown.
 
-Rules:
-- Output only the raw text, nothing else
-- Preserve formatting and line breaks
-- No descriptions, explanations, or commentary
-- If no text found, output: [NO TEXT FOUND]`;
+CRITICAL RULES:
+- Output ONLY the exact text visible in the image
+- Do NOT add punctuation that isn't in the original
+- Do NOT add a period/dot at the end unless it's in the image
+- Preserve exact formatting, spacing, and line breaks
+- No descriptions or commentary
+- If no text: [NO TEXT FOUND]`;
 	}
 
-	// Custom prompt mode - user wants specific extraction/processing
-	return `OCR this image and follow these instructions: ${custom}
+	// Custom prompt mode - user's instruction is the PRIMARY task
+	return `TASK: ${custom}
 
-Rules:
-- Focus on the text content in the image
-- Follow the user's instructions above
-- Be concise and direct in your response
-- No unnecessary preamble or explanations`;
+Read the text in this image and complete the task above.
+
+CRITICAL RULES:
+- Your PRIMARY job is to follow the TASK instruction above
+- Do NOT output the full text unless the task asks for it
+- Do NOT add punctuation that isn't in the original
+- Do NOT add a period/dot at the end unless it's in the image
+- Be direct - no preamble like "The answer is:" or "Here is:"
+- Output only what the task asks for`;
 }
 
 /**

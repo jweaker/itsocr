@@ -461,7 +461,19 @@ export class OCRSession implements DurableObject {
 			this.status = 'completed';
 			this.isProcessing = false;
 
-			const finalText = this.extractedText.trim();
+			// Clean up the extracted text
+			let finalText = this.extractedText.trim();
+
+			// Remove trailing period that the model sometimes adds incorrectly
+			// Only remove if it looks like it was added by the model (single trailing dot)
+			if (finalText.endsWith('.') && !finalText.endsWith('..')) {
+				// Check if the second-to-last char suggests this is model-added
+				const beforeDot = finalText.slice(-2, -1);
+				// If it ends with letter/number + dot (not punctuation + dot), likely model-added
+				if (/[a-zA-Z0-9]/.test(beforeDot)) {
+					finalText = finalText.slice(0, -1);
+				}
+			}
 
 			// Save to database
 			await db.execute({
