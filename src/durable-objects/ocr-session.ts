@@ -511,12 +511,16 @@ export class OCRSession implements DurableObject {
 					images: [imageBase64],
 					stream: true,
 					options: {
-						temperature: 0,
+						temperature: 0.1,
 						num_predict: 16384,
 						num_ctx: 16384,
 						num_gpu: 999,
 						main_gpu: 0,
-						num_thread: 8
+						num_thread: 8,
+						repeat_penalty: 1.3,
+						repeat_last_n: 256,
+						top_k: 40,
+						top_p: 0.9
 					},
 					keep_alive: '30m'
 				}),
@@ -636,12 +640,16 @@ export class OCRSession implements DurableObject {
 				images: [imageBase64],
 				stream: false,
 				options: {
-					temperature: 0,
+					temperature: 0.1,
 					num_predict: 16384,
 					num_ctx: 16384,
 					num_gpu: 999,
 					main_gpu: 0,
-					num_thread: 8
+					num_thread: 8,
+					repeat_penalty: 1.3,
+					repeat_last_n: 256,
+					top_k: 40,
+					top_p: 0.9
 				},
 				keep_alive: '30m'
 			}),

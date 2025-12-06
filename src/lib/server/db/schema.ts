@@ -134,6 +134,35 @@ export const usageRecord = sqliteTable(
 );
 
 // =============================================================================
+// API Access Tokens (for programmatic access)
+// =============================================================================
+
+export const apiToken = sqliteTable(
+	'api_token',
+	{
+		id: text('id').primaryKey(),
+		userId: text('user_id')
+			.notNull()
+			.references(() => user.id, { onDelete: 'cascade' }),
+		name: text('name').notNull(), // User-friendly name for the token
+		// Token is stored as SHA-256 hash for security - original token shown only once at creation
+		tokenHash: text('token_hash').notNull().unique(),
+		// Prefix for identification (first 8 chars of token, e.g., "itsocr_a1b2c3d4")
+		tokenPrefix: text('token_prefix').notNull(),
+		lastUsedAt: integer('last_used_at', { mode: 'timestamp' }),
+		expiresAt: integer('expires_at', { mode: 'timestamp' }), // null = never expires
+		revokedAt: integer('revoked_at', { mode: 'timestamp' }), // null = active
+		createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull()
+	},
+	(table) => [
+		index('api_token_user_idx').on(table.userId),
+		index('api_token_hash_idx').on(table.tokenHash),
+		index('api_token_prefix_idx').on(table.tokenPrefix)
+	]
+);
+
+// =============================================================================
 // Relations
 // =============================================================================
 
@@ -141,7 +170,8 @@ export const userRelations = relations(user, ({ many }) => ({
 	sessions: many(session),
 	accounts: many(account),
 	scannedImages: many(scannedImage),
-	usageRecords: many(usageRecord)
+	usageRecords: many(usageRecord),
+	apiTokens: many(apiToken)
 }));
 
 export const sessionRelations = relations(session, ({ one }) => ({
@@ -168,6 +198,13 @@ export const scannedImageRelations = relations(scannedImage, ({ one }) => ({
 export const usageRecordRelations = relations(usageRecord, ({ one }) => ({
 	user: one(user, {
 		fields: [usageRecord.userId],
+		references: [user.id]
+	})
+}));
+
+export const apiTokenRelations = relations(apiToken, ({ one }) => ({
+	user: one(user, {
+		fields: [apiToken.userId],
 		references: [user.id]
 	})
 }));

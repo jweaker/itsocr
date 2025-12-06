@@ -20,19 +20,33 @@
 	const features = [
 		{
 			title: 'AI-Powered Extraction',
-			desc: 'Vision model extracts text from images with formatting preserved.'
+			desc: 'Vision model extracts text from images and PDFs with high accuracy.',
+			icon: 'brain'
+		},
+		{
+			title: 'PDF Support',
+			desc: 'Upload multi-page PDFs and extract text from all pages in parallel.',
+			icon: 'pdf'
+		},
+		{
+			title: 'REST API Access',
+			desc: 'Integrate OCR into your apps with our simple API. All plans included.',
+			icon: 'api'
 		},
 		{
 			title: 'Custom Prompts',
-			desc: 'Add instructions like "Extract invoice total" or "Focus on handwritten text".'
+			desc: 'Add instructions like "Extract invoice total" or "Focus on handwritten text".',
+			icon: 'prompt'
 		},
 		{
 			title: 'Real-time Streaming',
-			desc: "Watch text appear as it's extracted via WebSocket."
+			desc: "Watch text appear as it's extracted via WebSocket.",
+			icon: 'stream'
 		},
 		{
 			title: 'Drag, Drop, or Paste',
-			desc: 'Upload via file picker, drag-and-drop, or paste from clipboard.'
+			desc: 'Upload via file picker, drag-and-drop, or paste from clipboard.',
+			icon: 'upload'
 		}
 	];
 
@@ -42,6 +56,7 @@
 			price: '$0',
 			period: '/month',
 			desc: '10 images/month, 5MB max',
+			features: ['API Access', 'PDF Support', 'Custom Prompts'],
 			highlight: false
 		},
 		{
@@ -49,6 +64,7 @@
 			price: '$9.99',
 			period: '/month',
 			desc: '500 images/month, 20MB max',
+			features: ['Everything in Free', 'Priority Processing', '90-day Retention'],
 			highlight: true
 		},
 		{
@@ -56,6 +72,7 @@
 			price: '$49.99',
 			period: '/month',
 			desc: 'Unlimited images, 50MB max',
+			features: ['Everything in Pro', 'Unlimited Usage', '1-year Retention'],
 			highlight: false
 		}
 	];
@@ -63,6 +80,7 @@
 	const navLinks = [
 		{ href: '#features', label: 'Features' },
 		{ href: '#pricing', label: 'Pricing' },
+		{ href: '/docs/api', label: 'API Docs' },
 		{ href: '#contact', label: 'Contact' }
 	];
 </script>
@@ -170,15 +188,24 @@
 	<main>
 		<!-- Hero Section -->
 		<section class="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 md:py-24">
+			<div
+				class="mb-4 inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-sm"
+			>
+				<span class="rounded-full bg-primary px-2 py-0.5 text-xs text-primary-foreground">New</span>
+				<span>API access now available on all plans</span>
+			</div>
 			<h1 class="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
 				Image to text, instantly
 			</h1>
 			<p class="mx-auto mt-6 max-w-xl text-lg text-muted-foreground">
-				Upload an image, get the text. Use custom prompts to extract exactly what you need.
+				Extract text from images and PDFs with AI. Use our web app or integrate via API.
 			</p>
 			<div class="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
 				<a href="/login">
 					<Button size="lg" class="min-w-[160px]">Get Started Free</Button>
+				</a>
+				<a href="/docs/api">
+					<Button size="lg" variant="outline" class="min-w-[160px]">View API Docs</Button>
 				</a>
 			</div>
 		</section>
@@ -187,7 +214,8 @@
 		<section id="features" class="scroll-mt-20 py-16">
 			<div class="mx-auto max-w-6xl px-4 sm:px-6">
 				<h2 class="text-2xl font-semibold sm:text-3xl">Features</h2>
-				<div class="mt-8 grid gap-4 sm:grid-cols-2">
+				<p class="mt-2 text-muted-foreground">Everything you need to extract text at scale.</p>
+				<div class="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 					{#each features as feature}
 						<Card.Root
 							class="transition-all hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
@@ -208,6 +236,7 @@
 		<section id="pricing" class="scroll-mt-20 border-t py-16">
 			<div class="mx-auto max-w-6xl px-4 sm:px-6">
 				<h2 class="text-2xl font-semibold sm:text-3xl">Pricing</h2>
+				<p class="mt-2 text-muted-foreground">Simple pricing. API access included on all plans.</p>
 				<div class="mt-8 grid gap-4 md:grid-cols-3">
 					{#each pricingTiers as tier}
 						<Card.Root
@@ -232,6 +261,28 @@
 								</div>
 								<Card.Description>{tier.desc}</Card.Description>
 							</Card.Header>
+							<Card.Content>
+								<ul class="space-y-2 text-sm">
+									{#each tier.features as feature}
+										<li class="flex items-center gap-2">
+											<svg
+												class="h-4 w-4 text-primary"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke="currentColor"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M5 13l4 4L19 7"
+												/>
+											</svg>
+											{feature}
+										</li>
+									{/each}
+								</ul>
+							</Card.Content>
 							<Card.Footer>
 								<a href="/login" class="w-full">
 									<Button class="w-full" variant={tier.highlight ? 'default' : 'outline'}>
@@ -241,6 +292,90 @@
 							</Card.Footer>
 						</Card.Root>
 					{/each}
+				</div>
+			</div>
+		</section>
+
+		<!-- API Section -->
+		<section class="scroll-mt-20 border-t py-16">
+			<div class="mx-auto max-w-6xl px-4 sm:px-6">
+				<div class="grid gap-8 lg:grid-cols-2 lg:items-center">
+					<div>
+						<h2 class="text-2xl font-semibold sm:text-3xl">Simple REST API</h2>
+						<p class="mt-4 text-muted-foreground">
+							Integrate OCR into your applications with just a few lines of code. Create API tokens
+							in your dashboard and start extracting text programmatically.
+						</p>
+						<ul class="mt-6 space-y-3">
+							<li class="flex items-center gap-2 text-sm">
+								<svg
+									class="h-5 w-5 text-primary"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M5 13l4 4L19 7"
+									/>
+								</svg>
+								Available on all plans, including Free
+							</li>
+							<li class="flex items-center gap-2 text-sm">
+								<svg
+									class="h-5 w-5 text-primary"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M5 13l4 4L19 7"
+									/>
+								</svg>
+								Simple Bearer token authentication
+							</li>
+							<li class="flex items-center gap-2 text-sm">
+								<svg
+									class="h-5 w-5 text-primary"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke="currentColor"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M5 13l4 4L19 7"
+									/>
+								</svg>
+								Supports images and PDFs
+							</li>
+						</ul>
+						<div class="mt-8">
+							<a href="/docs/api">
+								<Button>View API Documentation</Button>
+							</a>
+						</div>
+					</div>
+					<div class="overflow-hidden rounded-lg bg-zinc-900 p-4">
+						<pre class="text-sm text-zinc-100"><code
+								>{`curl -X POST https://itsocr.com/api/v1/ocr \\
+  -H "Authorization: Bearer itsocr_..." \\
+  -F "file=@document.jpg"
+
+# Response
+{
+  "success": true,
+  "text": "Extracted text...",
+  "processingTimeMs": 1234
+}`}</code
+							></pre>
+					</div>
 				</div>
 			</div>
 		</section>

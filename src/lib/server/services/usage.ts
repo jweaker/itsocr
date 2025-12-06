@@ -136,17 +136,11 @@ export async function getUserPlan(userId: string) {
 
 /**
  * Check if user can upload based on their plan limits
- * Currently disabled - always allows uploads
  */
 export async function checkUploadLimits(
 	userId: string,
 	fileSizeBytes: number
 ): Promise<{ allowed: boolean; error?: string }> {
-	// TODO: Re-enable limits when ready for production
-	// For now, allow all uploads
-	return { allowed: true };
-
-	/*
 	// Run both queries in parallel
 	const [usage, plan] = await Promise.all([getCurrentUsage(userId), getUserPlan(userId)]);
 
@@ -165,5 +159,44 @@ export async function checkUploadLimits(
 	}
 
 	return { allowed: true };
-	*/
+}
+
+/**
+ * Check usage limits and optionally increment usage
+ * Returns current usage info and whether the operation is allowed
+ */
+export async function checkAndIncrementUsage(
+	userId: string,
+	fileSizeBytes: number
+): Promise<{
+	allowed: boolean;
+	currentUsage: number;
+	limit: number;
+	error?: string;
+}> {
+	const [usage, plan] = await Promise.all([getCurrentUsage(userId), getUserPlan(userId)]);
+
+	const currentUsage = usage.imagesScanned;
+	const limit = plan.imagesPerMonth;
+
+	// Check if limit is reached (skip check for unlimited plans)
+	if (limit !== -1 && currentUsage >= limit) {
+		return {
+			allowed: false,
+			currentUsage,
+			limit,
+			error: 'Monthly image limit reached. Please upgrade your plan.'
+		};
+	}
+
+	// If fileSizeBytes > 0, we're actually processing - increment usage
+	if (fileSizeBytes > 0) {
+		await incrementUsage(userId, fileSizeBytes);
+	}
+
+	return {
+		allowed: true,
+		currentUsage: fileSizeBytes > 0 ? currentUsage + 1 : currentUsage,
+		limit
+	};
 }

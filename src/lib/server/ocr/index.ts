@@ -13,8 +13,16 @@ export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
 	if (!custom) {
-		// Simple, direct OCR prompt - just extract text, nothing else
-		return 'Extract all text from this image.';
+		// Detailed OCR prompt for accurate text extraction without repetition
+		return `You are an OCR assistant. Extract all visible text from this image exactly as it appears.
+
+Rules:
+- Output ONLY the extracted text, nothing else
+- Preserve the original formatting, paragraphs, and line breaks
+- Do not add explanations, commentary, or descriptions
+- Do not repeat any text - extract each word/line only once
+- If text is unclear, make your best guess or skip it
+- Stop immediately when all text has been extracted`;
 	}
 
 	// Custom prompt mode
@@ -67,12 +75,16 @@ export async function processImageWithOllama(
 				images: [imageBase64],
 				stream: false,
 				options: {
-					temperature: 0,
+					temperature: 0.1,
 					num_predict: OCR_MAX_TOKENS,
 					num_ctx: OCR_CONTEXT_SIZE,
 					num_gpu: 999,
 					main_gpu: 0,
-					num_thread: 8
+					num_thread: 8,
+					repeat_penalty: 1.3,
+					repeat_last_n: 256,
+					top_k: 40,
+					top_p: 0.9
 				},
 				keep_alive: '30m'
 			})

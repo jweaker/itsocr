@@ -5,7 +5,13 @@
 
 import { z } from 'zod';
 import { router, publicProcedure } from './index.js';
-import { imagesRouter, plansRouter, usageRouter, dashboardRouter } from './routes/index.js';
+import {
+	imagesRouter,
+	plansRouter,
+	usageRouter,
+	dashboardRouter,
+	tokensRouter
+} from './routes/index.js';
 
 export const appRouter = router({
 	// General endpoints
@@ -24,7 +30,8 @@ export const appRouter = router({
 	images: imagesRouter,
 	plans: plansRouter,
 	usage: usageRouter,
-	dashboard: dashboardRouter
+	dashboard: dashboardRouter,
+	tokens: tokensRouter
 });
 
 export type AppRouter = typeof appRouter;

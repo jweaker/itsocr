@@ -30,7 +30,7 @@ export const PLANS: Record<PlanId, Plan> = {
 		imagesPerMonth: 10,
 		maxImageSizeMb: 5,
 		priorityProcessing: false,
-		apiAccess: false,
+		apiAccess: true,
 		retentionDays: 7
 	},
 	pro: {
@@ -43,7 +43,7 @@ export const PLANS: Record<PlanId, Plan> = {
 		imagesPerMonth: 500,
 		maxImageSizeMb: 20,
 		priorityProcessing: true,
-		apiAccess: false,
+		apiAccess: true,
 		retentionDays: 90
 	},
 	enterprise: {
