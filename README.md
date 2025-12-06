@@ -188,9 +188,35 @@ For PDFs, multiple pages are processed in parallel (4 at a time).
 
 ### Code Examples
 
-**JavaScript:**
+**JavaScript (Node.js):**
 
 ```javascript
+import fs from 'fs';
+
+// Read file and create a Blob
+const fileBuffer = fs.readFileSync('document.png');
+const blob = new Blob([fileBuffer], { type: 'image/png' });
+
+const formData = new FormData();
+formData.append('file', blob, 'document.png');
+
+const response = await fetch('https://your-domain.com/api/v1/ocr', {
+	method: 'POST',
+	headers: {
+		Authorization: 'Bearer your_api_token'
+	},
+	body: formData
+});
+
+const result = await response.json();
+console.log(result.text);
+```
+
+**JavaScript (Browser):**
+
+```javascript
+// In a browser, you can use a file input directly
+const fileInput = document.querySelector('input[type="file"]');
 const formData = new FormData();
 formData.append('file', fileInput.files[0]);
 

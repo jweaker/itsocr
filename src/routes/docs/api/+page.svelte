@@ -127,8 +127,14 @@
 
 			<h3 class="mb-2 mt-6 font-semibold">JavaScript / Node.js</h3>
 			<div class="overflow-x-auto rounded-lg bg-zinc-900 p-4">
-				<pre class="text-sm text-zinc-100">{`const formData = new FormData();
-formData.append('file', fs.createReadStream('document.jpg'));
+				<pre class="text-sm text-zinc-100">{`import fs from 'fs';
+
+// Read file and create a Blob
+const fileBuffer = fs.readFileSync('document.jpg');
+const blob = new Blob([fileBuffer], { type: 'image/jpeg' });
+
+const formData = new FormData();
+formData.append('file', blob, 'document.jpg');
 
 const response = await fetch('https://itsocr.com/api/v1/ocr', {
   method: 'POST',

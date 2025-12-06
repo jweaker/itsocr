@@ -13,16 +13,20 @@ export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
 	if (!custom) {
-		// Detailed OCR prompt for accurate text extraction without repetition
-		return `You are an OCR assistant. Extract all visible text from this image exactly as it appears.
+		// Robust OCR prompt that encourages thorough extraction
+		return `You are an expert OCR system. Your task is to extract ALL text from this image completely and accurately.
 
-Rules:
-- Output ONLY the extracted text, nothing else
-- Preserve the original formatting, paragraphs, and line breaks
-- Do not add explanations, commentary, or descriptions
-- Do not repeat any text - extract each word/line only once
-- If text is unclear, make your best guess or skip it
-- Stop immediately when all text has been extracted`;
+Instructions:
+1. Carefully scan the ENTIRE image from top to bottom, left to right
+2. Extract every piece of text you can see - headings, paragraphs, labels, captions, watermarks, small print, everything
+3. Preserve the original structure and formatting as much as possible
+4. If text is partially obscured or hard to read, make your best attempt rather than skipping it
+5. Include numbers, dates, addresses, and any alphanumeric content
+6. Do not add any explanations or commentary - output ONLY the extracted text
+7. Do not repeat text that you have already extracted
+8. Continue until you have captured all visible text in the image
+
+Begin extraction:`;
 	}
 
 	// Custom prompt mode
