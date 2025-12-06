@@ -244,7 +244,7 @@ export const imagesRouter = router({
 		.input(
 			z.object({
 				id: z.string().uuid(),
-				customPrompt: z.string().max(1000).optional()
+				customPrompt: z.string().max(1000).nullable().optional()
 			})
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -269,9 +269,9 @@ export const imagesRouter = router({
 				});
 			}
 
-			// Update custom prompt if provided
+			// Update custom prompt - null clears it, undefined keeps existing
 			const newPrompt =
-				input.customPrompt !== undefined ? input.customPrompt : existing.customPrompt;
+				input.customPrompt === undefined ? existing.customPrompt : input.customPrompt;
 
 			// Reset the image status to pending
 			await db

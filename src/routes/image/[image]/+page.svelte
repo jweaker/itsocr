@@ -360,10 +360,11 @@
 		if (!image) return;
 		isRescanning = true;
 		try {
-			// Use the rescan mutation
+			// Use the rescan mutation - pass null to clear, or the new prompt
+			const newPrompt = rescanPrompt.trim() || null;
 			const result = await trpc.images.rescan.mutate({
 				id: image.id,
-				customPrompt: rescanPrompt.trim() || undefined
+				customPrompt: newPrompt
 			});
 
 			// Reset local state - set to 'processing' to prevent double trigger
@@ -373,7 +374,7 @@
 				extractedText: null,
 				errorMessage: null,
 				processingTimeMs: null,
-				customPrompt: rescanPrompt.trim() || image.customPrompt
+				customPrompt: newPrompt
 			};
 
 			isRescanDialogOpen = false;
