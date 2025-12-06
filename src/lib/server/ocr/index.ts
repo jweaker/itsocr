@@ -25,15 +25,17 @@ export const OCR_OPTIONS = {
  * Build the OCR prompt based on whether custom instructions are provided
  */
 export function buildPrompt(customPrompt?: string | null): string {
-	const basePrompt = `[TRANSCRIBE]`;
 	const custom = customPrompt?.trim();
+
+	// Clear, direct prompt that discourages meta-commentary
+	const basePrompt = `Read and output all text visible in this image. Start immediately with the first word you see.`;
 
 	if (!custom) {
 		return basePrompt;
 	}
 
 	// Custom prompt is appended to base prompt
-	return `${basePrompt} ${custom}`;
+	return `${basePrompt} Additional instructions: ${custom}`;
 }
 
 /**
