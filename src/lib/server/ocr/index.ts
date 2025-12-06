@@ -27,13 +27,20 @@ export const OCR_OPTIONS = {
 export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
+	// Base OCR instruction that enforces pure text extraction
+	const baseInstruction = `You are an OCR engine. Output ONLY the raw text extracted from the image. Do not add any explanations, commentary, greetings, summaries, or formatting instructions. Do not say "Here is the text" or similar phrases. Just output the exact text as it appears in the image, nothing else.`;
+
 	if (!custom) {
-		// Simple, direct prompt that encourages complete extraction
-		return `Extract all text from this image exactly as written. Include every word, number, and symbol. Preserve paragraphs and formatting. Do not stop until all visible text has been extracted.`;
+		// Default OCR mode: extract all text exactly as written
+		return `${baseInstruction}
+
+Extract all text from this image exactly as written. Include every word, number, and symbol. Preserve paragraphs and line breaks.`;
 	}
 
-	// Custom prompt mode
-	return custom;
+	// Custom prompt mode: prepend the base instruction to enforce OCR-only behavior
+	return `${baseInstruction}
+
+${custom}`;
 }
 
 /**
