@@ -6,6 +6,21 @@ export const OCR_CONTEXT_SIZE = 16384;
 // Parallel processing configuration for PDFs
 export const PDF_PARALLEL_PAGES = 4; // Process 4 pages at a time on A5000
 
+// Ollama options optimized for OCR accuracy
+export const OCR_OPTIONS = {
+	temperature: 0, // Deterministic output for accuracy
+	num_predict: OCR_MAX_TOKENS,
+	num_ctx: OCR_CONTEXT_SIZE,
+	num_gpu: 999,
+	main_gpu: 0,
+	num_thread: 8,
+	repeat_penalty: 1.2, // Slight penalty to avoid repetition
+	repeat_last_n: 128, // Look back for repetition
+	top_k: 10, // More focused token selection
+	top_p: 0.5, // More deterministic sampling
+	mirostat: 0 // Disable mirostat for OCR
+};
+
 /**
  * Build the OCR prompt based on whether custom instructions are provided
  */
@@ -13,20 +28,22 @@ export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
 	if (!custom) {
-		// Robust OCR prompt that encourages thorough extraction
-		return `You are an expert OCR system. Your task is to extract ALL text from this image completely and accurately.
+		// Precise OCR prompt optimized for accuracy
+		return `OCR Task: Extract all text from this image with high accuracy.
 
-Instructions:
-1. Carefully scan the ENTIRE image from top to bottom, left to right
-2. Extract every piece of text you can see - headings, paragraphs, labels, captions, watermarks, small print, everything
-3. Preserve the original structure and formatting as much as possible
-4. If text is partially obscured or hard to read, make your best attempt rather than skipping it
-5. Include numbers, dates, addresses, and any alphanumeric content
-6. Do not add any explanations or commentary - output ONLY the extracted text
-7. Do not repeat text that you have already extracted
-8. Continue until you have captured all visible text in the image
+Guidelines:
+- Read every word exactly as written, including punctuation and special characters
+- Maintain the reading order: top to bottom, left to right
+- Preserve paragraph breaks and list formatting
+- Include all text: titles, body text, footnotes, headers, labels, watermarks
+- For tables, read row by row
+- If a character is ambiguous, use context to determine the most likely letter
+- Numbers and dates must be transcribed exactly
+- Do not skip any text, even if partially visible
+- Do not interpret or summarize - transcribe verbatim
+- Output only the extracted text with no commentary
 
-Begin extraction:`;
+Text from image:`;
 	}
 
 	// Custom prompt mode
@@ -78,18 +95,7 @@ export async function processImageWithOllama(
 				prompt: prompt,
 				images: [imageBase64],
 				stream: false,
-				options: {
-					temperature: 0.1,
-					num_predict: OCR_MAX_TOKENS,
-					num_ctx: OCR_CONTEXT_SIZE,
-					num_gpu: 999,
-					main_gpu: 0,
-					num_thread: 8,
-					repeat_penalty: 1.3,
-					repeat_last_n: 256,
-					top_k: 40,
-					top_p: 0.9
-				},
+				options: OCR_OPTIONS,
 				keep_alive: '30m'
 			})
 		});

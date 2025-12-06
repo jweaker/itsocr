@@ -15,7 +15,7 @@ import { validateApiToken, apiError, apiSuccess } from '$lib/server/auth/api-tok
 import { db } from '$lib/server/db';
 import { scannedImage, getPlan } from '$lib/server/db/schema';
 import { generateId } from '$lib/server/utils';
-import { buildPrompt, OCR_MODEL, OCR_MAX_TOKENS, OCR_CONTEXT_SIZE } from '$lib/server/ocr';
+import { buildPrompt, OCR_MODEL, OCR_OPTIONS } from '$lib/server/ocr';
 import { checkAndIncrementUsage } from '$lib/server/services/usage';
 
 // Maximum file size (50MB)
@@ -117,14 +117,7 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 				prompt: prompt,
 				images: [imageBase64],
 				stream: false,
-				options: {
-					temperature: 0,
-					num_predict: OCR_MAX_TOKENS,
-					num_ctx: OCR_CONTEXT_SIZE,
-					num_gpu: 999,
-					main_gpu: 0,
-					num_thread: 8
-				},
+				options: OCR_OPTIONS,
 				keep_alive: '30m'
 			})
 		});

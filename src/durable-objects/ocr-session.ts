@@ -9,6 +9,22 @@
 
 import { createClient } from '@libsql/client/web';
 
+// OCR Configuration - keep in sync with src/lib/server/ocr/index.ts
+const OCR_MODEL = 'llama3.2-vision:latest';
+const OCR_OPTIONS = {
+	temperature: 0, // Deterministic output for accuracy
+	num_predict: 16384,
+	num_ctx: 16384,
+	num_gpu: 999,
+	main_gpu: 0,
+	num_thread: 8,
+	repeat_penalty: 1.2, // Slight penalty to avoid repetition
+	repeat_last_n: 128, // Look back for repetition
+	top_k: 10, // More focused token selection
+	top_p: 0.5, // More deterministic sampling
+	mirostat: 0 // Disable mirostat for OCR
+};
+
 interface Env {
 	DATABASE_URL: string;
 	DATABASE_AUTH_TOKEN: string;
@@ -506,22 +522,11 @@ export class OCRSession implements DurableObject {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({
-					model: 'llama3.2-vision:latest',
+					model: OCR_MODEL,
 					prompt: prompt,
 					images: [imageBase64],
 					stream: true,
-					options: {
-						temperature: 0.1,
-						num_predict: 16384,
-						num_ctx: 16384,
-						num_gpu: 999,
-						main_gpu: 0,
-						num_thread: 8,
-						repeat_penalty: 1.3,
-						repeat_last_n: 256,
-						top_k: 40,
-						top_p: 0.9
-					},
+					options: OCR_OPTIONS,
 					keep_alive: '30m'
 				}),
 				signal: this.abortController?.signal
@@ -635,22 +640,11 @@ export class OCRSession implements DurableObject {
 			method: 'POST',
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({
-				model: 'llama3.2-vision:latest',
+				model: OCR_MODEL,
 				prompt: prompt,
 				images: [imageBase64],
 				stream: false,
-				options: {
-					temperature: 0.1,
-					num_predict: 16384,
-					num_ctx: 16384,
-					num_gpu: 999,
-					main_gpu: 0,
-					num_thread: 8,
-					repeat_penalty: 1.3,
-					repeat_last_n: 256,
-					top_k: 40,
-					top_p: 0.9
-				},
+				options: OCR_OPTIONS,
 				keep_alive: '30m'
 			}),
 			signal: this.abortController?.signal
