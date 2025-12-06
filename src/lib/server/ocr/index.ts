@@ -27,15 +27,32 @@ export const OCR_OPTIONS = {
 export function buildPrompt(customPrompt?: string | null): string {
 	const custom = customPrompt?.trim();
 
-	// Clear, direct prompt that discourages meta-commentary
-	const basePrompt = `Read and output all text visible in this image. Start immediately with the first word you see.`;
+	// Assertive, detailed prompt that leaves no room for interpretation
+	const basePrompt = `You are an OCR machine. You ONLY output the exact text from images. You are NOT a chatbot. You do NOT explain, summarize, or add notes.
+
+RULES:
+- Output ONLY the raw text from the image
+- Start with the first word in the image
+- End with the last word in the image
+- Never write "Note:", "The text says:", or any commentary
+- Never describe the image
+- Never explain what you did
+- Preserve line breaks and paragraphs
+- Include all text: headers, body, footers, captions, watermarks
+- If you cannot read something, skip it silently
+
+BEGIN OUTPUT:`;
 
 	if (!custom) {
 		return basePrompt;
 	}
 
 	// Custom prompt is appended to base prompt
-	return `${basePrompt} Additional instructions: ${custom}`;
+	return `${basePrompt}
+
+USER REQUEST: ${custom}
+
+BEGIN OUTPUT:`;
 }
 
 /**
